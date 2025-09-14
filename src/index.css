@@ -1,97 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Comptara Design System - Professional blockchain accounting platform */
-
 @layer base {
   :root {
-    --background: 249 250 251;
-    --foreground: 15 23 42;
-
-    --card: 255 255 255;
-    --card-foreground: 15 23 42;
-
-    --popover: 255 255 255;
-    --popover-foreground: 15 23 42;
-
-    --primary: 59 130 246;
-    --primary-foreground: 248 250 252;
-    --primary-hover: 37 99 235;
-
-    --secondary: 226 232 240;
-    --secondary-foreground: 51 65 85;
-
-    --muted: 241 245 249;
-    --muted-foreground: 100 116 139;
-
-    --accent: 34 197 94;
-    --accent-foreground: 255 255 255;
-
-    --destructive: 239 68 68;
-    --destructive-foreground: 255 255 255;
-
-    --success: 34 197 94;
-    --success-foreground: 255 255 255;
-
-    --warning: 245 158 11;
-    --warning-foreground: 255 255 255;
-
-    --border: 226 232 240;
-    --input: 226 232 240;
-    --ring: 59 130 246;
-
+    /* Modern color palette with gradients and depth */
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 210 100% 56%;
+    --primary-foreground: 0 0% 98%;
+    --primary-hover: 210 100% 46%;
+    --primary-glow: 210 100% 66%;
+    --secondary: 240 4.8% 15%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4.8% 15%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 4.8% 15%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 3.9%;
+    --border: 240 4.8% 15%;
+    --input: 240 4.8% 15%;
+    --ring: 210 100% 56%;
     --radius: 0.75rem;
-
-    /* Comptara specific tokens */
-    --blockchain-blue: 59 130 246;
-    --finance-green: 34 197 94;
-    --audit-purple: 147 51 234;
-    --shadow-elegant: 0 10px 25px -3px rgb(0 0 0 / 0.1);
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-hover)));
-    --gradient-success: linear-gradient(135deg, hsl(var(--success)), hsl(34 197 74));
+    
+    /* Enhanced colors for accounting */
+    --audit-purple: 270 50% 55%;
+    --profit-green: 142 76% 36%;
+    --expense-red: 0 84% 60%;
+    
+    /* Beautiful gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(210 100% 56%), hsl(210 100% 66%));
+    --gradient-card: linear-gradient(145deg, hsl(240 10% 6%), hsl(240 8% 8%));
+    --gradient-accent: linear-gradient(135deg, hsl(270 50% 55%), hsl(280 60% 65%));
+    
+    /* Modern shadows */
+    --shadow-elegant: 0 8px 32px -8px hsl(210 100% 56% / 0.15);
+    --shadow-card: 0 4px 24px -4px hsl(0 0% 0% / 0.25);
+    --shadow-glow: 0 0 40px hsl(210 100% 66% / 0.3);
+    
+    /* Animation variables */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .dark {
-    --background: 15 23 42;
-    --foreground: 248 250 252;
-
-    --card: 30 41 59;
-    --card-foreground: 248 250 252;
-
-    --popover: 30 41 59;
-    --popover-foreground: 248 250 252;
-
-    --primary: 59 130 246;
-    --primary-foreground: 15 23 42;
-    --primary-hover: 37 99 235;
-
-    --secondary: 51 65 85;
-    --secondary-foreground: 226 232 240;
-
-    --muted: 51 65 85;
-    --muted-foreground: 148 163 184;
-
-    --accent: 34 197 94;
-    --accent-foreground: 15 23 42;
-
-    --destructive: 239 68 68;
-    --destructive-foreground: 248 250 252;
-
-    --success: 34 197 94;
-    --success-foreground: 248 250 252;
-
-    --warning: 245 158 11;
-    --warning-foreground: 248 250 252;
-
-    --border: 51 65 85;
-    --input: 51 65 85;
-    --ring: 59 130 246;
-
-    --blockchain-blue: 59 130 246;
-    --finance-green: 34 197 94;
-    --audit-purple: 147 51 234;
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 210 100% 56%;
+    --primary-foreground: 0 0% 98%;
+    --primary-hover: 210 100% 46%;
+    --primary-glow: 210 100% 66%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 45%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 3.9%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 210 100% 56%;
+    
+    /* Light mode gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(210 100% 56%), hsl(210 100% 66%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(240 4.8% 97%));
+    --gradient-accent: linear-gradient(135deg, hsl(270 50% 55%), hsl(280 60% 65%));
+    
+    /* Light mode shadows */
+    --shadow-elegant: 0 8px 32px -8px hsl(210 100% 56% / 0.15);
+    --shadow-card: 0 4px 24px -4px hsl(240 5.9% 10% / 0.07);
+    --shadow-glow: 0 0 40px hsl(210 100% 66% / 0.2);
   }
 }
 
@@ -99,31 +95,56 @@
   * {
     @apply border-border;
   }
-
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    @apply bg-background text-foreground font-inter antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
-
-  /* Smooth transitions for all interactive elements */
-  button, input, select, textarea {
-    transition: var(--transition-smooth);
-  }
-
+  
   /* Custom scrollbar */
   ::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
   }
-  
   ::-webkit-scrollbar-track {
-    @apply bg-muted/30;
+    @apply bg-muted;
   }
-  
   ::-webkit-scrollbar-thumb {
-    @apply bg-muted-foreground/50 rounded-full;
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+@layer components {
+  /* Glass morphism effect */
+  .glass {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
   }
   
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/70;
+  /* Modern card style */
+  .card-modern {
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-card);
+    transition: var(--transition-smooth);
+  }
+  
+  .card-modern:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-elegant);
+  }
+  
+  /* Glow effect */
+  .glow {
+    box-shadow: var(--shadow-glow);
+  }
+  
+  /* Gradient text */
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }

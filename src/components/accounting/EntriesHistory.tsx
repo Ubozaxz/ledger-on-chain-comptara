@@ -39,11 +39,21 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
     });
   };
 
-  const handleGenerateProof = (entry: Entry) => {
-    toast({
-      title: "Justificatif généré",
-      description: `Document de preuve pour la transaction ${entry.txHash.slice(0, 8)}...`,
-    });
+  const handleGenerateProof = async (entry: Entry) => {
+    try {
+      const { generateEntryProofPDF } = await import("@/lib/pdf-generator");
+      await generateEntryProofPDF(entry);
+      toast({
+        title: "Justificatif généré",
+        description: `PDF téléchargé pour la transaction ${entry.txHash.slice(0, 8)}...`,
+      });
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Impossible de générer le justificatif",
+        variant: "destructive",
+      });
+    }
   };
 
   if (entries.length === 0) {
