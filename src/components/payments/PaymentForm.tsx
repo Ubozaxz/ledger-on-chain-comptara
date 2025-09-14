@@ -36,19 +36,20 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
 
     setIsProcessing(true);
 
-    // Simulation de transaction blockchain
-    setTimeout(() => {
-      const mockTxHash = `0x${Math.random().toString(16).substr(2, 40)}`;
+    try {
+      const { sendHBAR, getExplorerTxUrl } = await import("@/lib/hedera");
+      const txHash = await sendHBAR({ to: paymentData.destinataire, amountHBAR: paymentData.montant });
+
       const payment = {
         id: Date.now().toString(),
         ...paymentData,
-        txHash: mockTxHash,
+        txHash,
         timestamp: new Date().toISOString(),
-        status: "success"
+        status: "success",
       };
 
       onPaymentAdded(payment);
-      
+
       toast({
         title: `${paymentData.type === 'paiement' ? 'Paiement' : 'Encaissement'} effectué`,
         description: (
@@ -57,11 +58,12 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
             <p>Destinataire: {paymentData.destinataire.slice(0, 8)}...</p>
             <div className="flex items-center space-x-2">
               <Hash className="h-4 w-4" />
-              <span className="font-mono text-xs">{mockTxHash}</span>
+              <a href={getExplorerTxUrl(txHash)} target="_blank" rel="noreferrer" className="font-mono text-xs text-primary hover:underline">
+                {txHash}
+              </a>
             </div>
           </div>
         ),
-        variant: "default",
       });
 
       // Reset form
@@ -72,8 +74,15 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
         devise: "HBAR",
         objet: "",
       });
+    } catch (err: any) {
+      toast({
+        title: "Échec de la transaction",
+        description: err?.message || "Une erreur est survenue",
+        variant: "destructive",
+      });
+    } finally {
       setIsProcessing(false);
-    }, 2500);
+    }
   };
 
   return (

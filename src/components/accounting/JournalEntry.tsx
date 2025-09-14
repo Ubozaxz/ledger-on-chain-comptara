@@ -37,19 +37,25 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
 
     setIsSubmitting(true);
 
-    // Simulation d'écriture on-chain avec délai réaliste
-    setTimeout(() => {
-      const mockTxHash = `0x${Math.random().toString(16).substr(2, 40)}`;
+    try {
+      const { anchorEntryData, getExplorerTxUrl } = await import("@/lib/hedera");
+      const payload = {
+        type: "journal_entry",
+        ...formData,
+        timestamp: new Date().toISOString(),
+      };
+      const txHash = await anchorEntryData(payload);
+
       const entry = {
         id: Date.now().toString(),
         ...formData,
-        txHash: mockTxHash,
-        timestamp: new Date().toISOString(),
-        status: "success"
+        txHash,
+        timestamp: payload.timestamp,
+        status: "success",
       };
 
       onEntryAdded(entry);
-      
+
       toast({
         title: "Écriture enregistrée avec succès",
         description: (
@@ -57,11 +63,12 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
             <p>Montant: {formData.montant} {formData.devise}</p>
             <div className="flex items-center space-x-2">
               <Hash className="h-4 w-4" />
-              <span className="font-mono text-xs">{mockTxHash}</span>
+              <a href={getExplorerTxUrl(txHash)} target="_blank" rel="noreferrer" className="font-mono text-xs text-primary hover:underline">
+                {txHash}
+              </a>
             </div>
           </div>
         ),
-        variant: "default",
       });
 
       // Reset form
@@ -73,8 +80,15 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
         compteDebit: "",
         compteCredit: "",
       });
+    } catch (err: any) {
+      toast({
+        title: "Échec de l'enregistrement",
+        description: err?.message || "Une erreur est survenue",
+        variant: "destructive",
+      });
+    } finally {
       setIsSubmitting(false);
-    }, 2000);
+    }
   };
 
   return (

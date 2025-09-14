@@ -17,14 +17,26 @@ const Index = () => {
   const [payments, setPayments] = useState<any[]>([]);
   const { toast } = useToast();
 
-  const handleConnect = () => {
-    setIsConnected(true);
-    setWalletAddress("0x742d35Cc6475C4C9DA9f90123ABC456789DEF");
+  const handleConnect = async () => {
+    try {
+      const { ensureHederaTestnet, connectWallet } = await import("@/lib/hedera");
+      await ensureHederaTestnet();
+      const account = await connectWallet();
+      setIsConnected(true);
+      setWalletAddress(account);
+      toast({
+        title: "Portefeuille connecté",
+        description: `Connecté à Hedera Testnet avec ${account.slice(0, 8)}...`,
+      });
+    } catch (err: any) {
+      toast({ title: "Connexion échouée", description: err?.message || "Vérifiez MetaMask", variant: "destructive" });
+    }
   };
 
   const handleDisconnect = () => {
     setIsConnected(false);
     setWalletAddress(null);
+    toast({ title: "Déconnecté", description: "Portefeuille déconnecté" });
   };
 
   const handleEntryAdded = (entry: any) => {

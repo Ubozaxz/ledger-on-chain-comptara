@@ -33,9 +33,9 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
   };
 
   const handleViewExplorer = (txHash: string) => {
-    toast({
-      title: "Explorateur Hedera",
-      description: `Transaction: ${txHash}`,
+    import("@/lib/hedera").then(({ getExplorerTxUrl }) => {
+      const url = getExplorerTxUrl(txHash);
+      window.open(url, "_blank", "noopener,noreferrer");
     });
   };
 

@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Wallet, Shield, LogOut } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 
 interface HeaderProps {
   isConnected: boolean;
@@ -12,17 +11,9 @@ interface HeaderProps {
 }
 
 export const Header = ({ isConnected, walletAddress, onConnect, onDisconnect }: HeaderProps) => {
-  const { toast } = useToast();
-
   const handleConnect = () => {
-    // Simulation de connexion Metamask
-    const mockAddress = "0x742d35Cc6475C4C9DA9f90123ABC456789DEF";
+    // Déclenche la connexion réelle via le parent (Index)
     onConnect();
-    toast({
-      title: "Portefeuille connecté",
-      description: `Connecté à Hedera Testnet avec ${mockAddress.slice(0, 8)}...`,
-      variant: "default",
-    });
   };
 
   const formatAddress = (address: string) => {
