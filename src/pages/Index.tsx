@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Header } from "@/components/layout/Header";
+import { WalletConnector } from "@/components/wallet/WalletConnector";
+import { WalletType } from "@/lib/wallets";
 import { JournalEntry } from "@/components/accounting/JournalEntry";
 import { EntriesHistory } from "@/components/accounting/EntriesHistory";
 import { PaymentForm } from "@/components/payments/PaymentForm";
@@ -14,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 const Index = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [walletType, setWalletType] = useState<WalletType | null>(null);
   const [entries, setEntries] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const { toast } = useToast();
@@ -91,12 +93,13 @@ const Index = () => {
   if (!isConnected) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
-        <Header 
-          isConnected={isConnected}
-          walletAddress={walletAddress}
-          onConnect={handleConnect}
-          onDisconnect={handleDisconnect}
-        />
+      <WalletConnector 
+        isConnected={isConnected}
+        walletAddress={walletAddress}
+        walletType={walletType}
+        onConnect={handleConnect}
+        onDisconnect={handleDisconnect}
+      />
         
         <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
           <Card className="w-full max-w-md mx-4 card-modern">
@@ -145,9 +148,10 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
-      <Header 
+      <WalletConnector 
         isConnected={isConnected}
         walletAddress={walletAddress}
+        walletType={walletType}
         onConnect={handleConnect}
         onDisconnect={handleDisconnect}
       />

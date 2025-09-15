@@ -7,12 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CreditCard, Hash, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 
 interface PaymentFormProps {
   onPaymentAdded: (payment: any) => void;
 }
 
 export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
+  const { t } = useTranslation();
   const [paymentData, setPaymentData] = useState({
     type: "paiement", // paiement ou encaissement
     destinataire: "",
@@ -90,13 +92,13 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <CreditCard className="h-5 w-5 text-primary" />
-          <span>Paiements & Règlements</span>
+          <span>{t('paymentForm')}</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Type d'opération</Label>
+            <Label>{t('transactionType')}</Label>
             <Select 
               value={paymentData.type} 
               onValueChange={(value) => setPaymentData({ ...paymentData, type: value })}
@@ -108,13 +110,13 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
                 <SelectItem value="paiement">
                   <div className="flex items-center space-x-2">
                     <ArrowUpRight className="h-4 w-4" />
-                    <span>Paiement fournisseur</span>
+                    <span>{t('payment')}</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="encaissement">
                   <div className="flex items-center space-x-2">
                     <ArrowDownLeft className="h-4 w-4" />
-                    <span>Encaissement client</span>
+                    <span>{t('receipt')}</span>
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -123,7 +125,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="destinataire">Adresse destinataire *</Label>
+              <Label htmlFor="destinataire">{t('recipient')} *</Label>
               <Input
                 id="destinataire"
                 placeholder="0x742d35Cc..."
@@ -133,7 +135,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="devise">Devise</Label>
+              <Label htmlFor="devise">{t('currency')}</Label>
               <Select 
                 value={paymentData.devise} 
                 onValueChange={(value) => setPaymentData({ ...paymentData, devise: value })}
@@ -151,7 +153,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="montant">Montant *</Label>
+            <Label htmlFor="montant">{t('amount')} *</Label>
             <Input
               id="montant"
               type="number"
@@ -164,7 +166,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="objet">Objet du paiement *</Label>
+            <Label htmlFor="objet">{t('object')} *</Label>
             <Textarea
               id="objet"
               placeholder="Décrivez l'objet du paiement..."

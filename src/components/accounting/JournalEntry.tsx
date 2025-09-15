@@ -7,12 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BookOpen, Hash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 
 interface JournalEntryProps {
   onEntryAdded: (entry: any) => void;
 }
 
 export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     libelle: "",
@@ -96,14 +98,14 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <BookOpen className="h-5 w-5 text-primary" />
-          <span>Nouvelle écriture comptable</span>
+          <span>{t('journalEntry')}</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="date">Date *</Label>
+              <Label htmlFor="date">{t('date')} *</Label>
               <Input
                 id="date"
                 type="date"
@@ -113,7 +115,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="devise">Devise</Label>
+              <Label htmlFor="devise">{t('currency')}</Label>
               <Select value={formData.devise} onValueChange={(value) => setFormData({ ...formData, devise: value })}>
                 <SelectTrigger>
                   <SelectValue />
@@ -128,7 +130,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="libelle">Libellé *</Label>
+            <Label htmlFor="libelle">{t('description')} *</Label>
             <Textarea
               id="libelle"
               placeholder="Description de l'opération comptable..."
@@ -139,7 +141,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="montant">Montant *</Label>
+            <Label htmlFor="montant">{t('amount')} *</Label>
             <Input
               id="montant"
               type="number"
@@ -153,7 +155,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="compteDebit">Compte débit *</Label>
+              <Label htmlFor="compteDebit">{t('debitAccount')} *</Label>
               <Input
                 id="compteDebit"
                 placeholder="Ex: 411000 - Clients"
@@ -163,7 +165,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="compteCredit">Compte crédit *</Label>
+              <Label htmlFor="compteCredit">{t('creditAccount')} *</Label>
               <Input
                 id="compteCredit"
                 placeholder="Ex: 701000 - Ventes"
@@ -179,7 +181,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
             className="w-full bg-primary hover:bg-primary-hover"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Enregistrement en cours..." : "Confirmer l'enregistrement"}
+            {isSubmitting ? t('submitting') : t('submit')}
           </Button>
         </form>
       </CardContent>

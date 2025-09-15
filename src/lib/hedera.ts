@@ -9,7 +9,7 @@ const HEDERA_TESTNET = {
   blockExplorerUrls: ["https://hashscan.io/testnet"],
 } as const;
 
-function getEthereum(): any {
+export function getEthereum(): any {
   if (typeof window !== "undefined" && (window as any).ethereum) {
     return (window as any).ethereum;
   }
