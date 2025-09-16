@@ -160,6 +160,34 @@ export const WalletConnector = ({
                       <div className="text-sm text-white/70">Hedera Native Wallet</div>
                     </div>
                   </Button>
+
+                  {!isWalletInstalled('metamask') && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      MetaMask non détecté.{' '}
+                      <a
+                        href="https://metamask.io/download/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        Installer MetaMask
+                      </a>
+                    </p>
+                  )}
+
+                  {!(typeof window !== 'undefined' && (window as any).hashconnect) && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      HashPack non détecté.{' '}
+                      <a
+                        href="https://www.hashpack.app/download"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        Installer HashPack
+                      </a>
+                    </p>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>

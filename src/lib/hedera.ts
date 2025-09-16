@@ -18,8 +18,9 @@ export function getEthereum(): any | null {
 
 export async function ensureHederaTestnet() {
   const ethereum = getEthereum();
+  // Do not throw if MetaMask is not present; simply no-op so UI can render safely
   if (!ethereum) {
-    throw new Error("MetaMask not found");
+    return;
   }
   try {
     const current = await ethereum.request({ method: "eth_chainId" });
@@ -117,15 +118,39 @@ export async function sendHBAR(params: { to: string; amountHBAR: string; dataHex
 }
 
 export async function anchorEntryData(payload: Record<string, any>): Promise<string> {
+  const ethereum = getEthereum();
+  if (!ethereum) throw new Error("Aucun portefeuille connecté");
+
   const from = await getSelectedAddress();
   if (!from) throw new Error("Aucun portefeuille connecté");
+
   const dataHex = utf8ToHex(JSON.stringify(payload));
-  // Self-call with data to anchor payload
-  const ethereum = getEthereum();
-  if (!ethereum) throw new Error("MetaMask not found");
-  const tx = { from, to: from, value: "0x0", data: dataHex } as any;
-  const txHash: string = await ethereum.request({ method: "eth_sendTransaction", params: [tx] });
-  return txHash;
+
+  // Build base transaction (self-call)
+  const baseTx = { from, to: from, value: "0x0" } as any;
+
+  try {
+    const chainId = (await ethereum.request({ method: "eth_chainId" }))?.toLowerCase();
+
+    // Hedera EVM restricts EOA->EOA txns with calldata. If on Hedera, omit data.
+    if (chainId === HEDERA_TESTNET.chainId) {
+      const txHash: string = await ethereum.request({ method: "eth_sendTransaction", params: [baseTx] });
+      return txHash;
+    }
+
+    // Other EVM chains: include data
+    const txWithData = { ...baseTx, data: dataHex } as any;
+    const txHash: string = await ethereum.request({ method: "eth_sendTransaction", params: [txWithData] });
+    return txHash;
+  } catch (err: any) {
+    const msg = String(err?.message || "").toLowerCase();
+    if (msg.includes("cannot include data") || msg.includes("include data")) {
+      // Retry without data as a safe fallback
+      const txHash: string = await ethereum.request({ method: "eth_sendTransaction", params: [baseTx] });
+      return txHash;
+    }
+    throw err;
+  }
 }
 
 export { HEDERA_TESTNET };
