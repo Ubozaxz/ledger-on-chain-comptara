@@ -57,6 +57,7 @@ const resources = {
       // Wallet Connection
       walletNotConnected: 'Portefeuille non connecté',
       pleaseConnect: 'Veuillez connecter votre portefeuille pour accéder au tableau de bord.',
+      connectionSuccess: 'connecté avec succès',
       
       // Messages
       entrySuccess: 'Écriture enregistrée avec succès',
@@ -130,6 +131,7 @@ const resources = {
       // Wallet Connection
       walletNotConnected: 'Wallet Not Connected',
       pleaseConnect: 'Please connect your wallet to access the dashboard.',
+      connectionSuccess: 'connected successfully',
       
       // Messages
       entrySuccess: 'Entry recorded successfully',

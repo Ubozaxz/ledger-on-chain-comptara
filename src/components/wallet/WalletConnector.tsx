@@ -44,13 +44,14 @@ export const WalletConnector = ({
       
       toast({
         title: t('entrySuccess'),
-        description: `${t(type)} ${t('connectionSuccess')} - ${formatAddress(address)}`,
+        description: `${t(type)} connecté - ${formatAddress(address)}`,
       });
     } catch (error) {
       console.error('Wallet connection error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
       toast({
         title: t('connectionError'),
-        description: error instanceof Error ? error.message : 'Unknown error',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
