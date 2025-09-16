@@ -9,15 +9,18 @@ const HEDERA_TESTNET = {
   blockExplorerUrls: ["https://hashscan.io/testnet"],
 } as const;
 
-export function getEthereum(): any {
+export function getEthereum(): any | null {
   if (typeof window !== "undefined" && (window as any).ethereum) {
     return (window as any).ethereum;
   }
-  throw new Error("MetaMask (window.ethereum) introuvable");
+  return null;
 }
 
 export async function ensureHederaTestnet() {
   const ethereum = getEthereum();
+  if (!ethereum) {
+    throw new Error("MetaMask not found");
+  }
   try {
     const current = await ethereum.request({ method: "eth_chainId" });
     if (current?.toLowerCase() === HEDERA_TESTNET.chainId) return;
@@ -55,6 +58,7 @@ export async function ensureHederaTestnet() {
 
 export async function connectWallet(): Promise<string> {
   const ethereum = getEthereum();
+  if (!ethereum) throw new Error("MetaMask not found");
   const accounts: string[] = await ethereum.request({ method: "eth_requestAccounts" });
   if (!accounts || accounts.length === 0) throw new Error("Aucun compte MetaMask disponible");
   return accounts[0];
@@ -63,6 +67,7 @@ export async function connectWallet(): Promise<string> {
 export async function getSelectedAddress(): Promise<string | null> {
   try {
     const ethereum = getEthereum();
+    if (!ethereum) return null;
     const accounts: string[] = await ethereum.request({ method: "eth_accounts" });
     return accounts?.[0] ?? null;
   } catch {
@@ -97,6 +102,7 @@ export function getExplorerTxUrl(txHash: string): string {
 
 export async function sendHBAR(params: { to: string; amountHBAR: string; dataHex?: string }): Promise<string> {
   const ethereum = getEthereum();
+  if (!ethereum) throw new Error("MetaMask not found");
   const from = await getSelectedAddress();
   if (!from) throw new Error("Aucun portefeuille connecté");
   const value = hbarToWeiHex(params.amountHBAR);
@@ -116,6 +122,7 @@ export async function anchorEntryData(payload: Record<string, any>): Promise<str
   const dataHex = utf8ToHex(JSON.stringify(payload));
   // Self-call with data to anchor payload
   const ethereum = getEthereum();
+  if (!ethereum) throw new Error("MetaMask not found");
   const tx = { from, to: from, value: "0x0", data: dataHex } as any;
   const txHash: string = await ethereum.request({ method: "eth_sendTransaction", params: [tx] });
   return txHash;

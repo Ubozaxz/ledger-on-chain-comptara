@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WalletConnector } from "@/components/wallet/WalletConnector";
 import { WalletType } from "@/lib/wallets";
 import { JournalEntry } from "@/components/accounting/JournalEntry";
@@ -20,6 +20,33 @@ const Index = () => {
   const [payments, setPayments] = useState<any[]>([]);
   const { toast } = useToast();
 
+  // Auto-detect previously connected wallet (MetaMask/HashPack)
+  const onWalletConnected = (address: string, type: WalletType) => {
+    setIsConnected(true);
+    setWalletAddress(address);
+    setWalletType(type);
+    toast({ title: 'Wallet connected', description: `${type.toUpperCase()} - ${address.slice(0,8)}...` });
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { getMetaMaskAddress, getHashPackAddress } = await import('@/lib/wallets');
+        const meta = await getMetaMaskAddress();
+        if (meta) {
+          onWalletConnected(meta, 'metamask');
+          return;
+        }
+        const hash = await getHashPackAddress();
+        if (hash) {
+          onWalletConnected(hash, 'hashpack');
+        }
+      } catch (e) {
+        // silent
+      }
+    })();
+  }, []);
+
   const handleConnect = async () => {
     try {
       const { ensureHederaTestnet, connectWallet } = await import("@/lib/hedera");
@@ -39,6 +66,7 @@ const Index = () => {
   const handleDisconnect = () => {
     setIsConnected(false);
     setWalletAddress(null);
+    setWalletType(null);
     toast({ title: "Déconnecté", description: "Portefeuille déconnecté" });
   };
 
@@ -97,7 +125,7 @@ const Index = () => {
         isConnected={isConnected}
         walletAddress={walletAddress}
         walletType={walletType}
-        onConnect={handleConnect}
+        onConnect={onWalletConnected}
         onDisconnect={handleDisconnect}
       />
         
@@ -152,7 +180,7 @@ const Index = () => {
         isConnected={isConnected}
         walletAddress={walletAddress}
         walletType={walletType}
-        onConnect={handleConnect}
+        onConnect={onWalletConnected}
         onDisconnect={handleDisconnect}
       />
       
