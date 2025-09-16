@@ -149,13 +149,18 @@ export const signTransactionHashPack = async (params: {
 
 // Utility functions
 export const isWalletInstalled = (type: WalletType): boolean => {
-  switch (type) {
-    case 'metamask':
-      return typeof window !== 'undefined' && !!getEthereum();
-    case 'hashpack':
-      return typeof window !== 'undefined' && !!(window as any).hashconnect;
-    default:
-      return false;
+  try {
+    if (typeof window === 'undefined') return false;
+    switch (type) {
+      case 'metamask':
+        return !!(window as any).ethereum; // do NOT call getEthereum here to avoid throw in some envs
+      case 'hashpack':
+        return !!(window as any).hashconnect;
+      default:
+        return false;
+    }
+  } catch {
+    return false;
   }
 };
 
