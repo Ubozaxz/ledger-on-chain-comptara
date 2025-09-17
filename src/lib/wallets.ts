@@ -39,26 +39,43 @@ export const connectHashPack = async (): Promise<string> => {
     const hashconnect = (window as any).hashconnect;
     
     try {
-      // Initialize HashConnect
-      await hashconnect.init({
-        appMetadata: {
-          name: "Comptara",
-          description: "Blockchain Accounting Platform",
-          icon: "https://absolute.url/to/icon.png"
-        }
-      });
+      // Initialize HashConnect if not already done
+      if (!hashconnect.connectionState) {
+        await hashconnect.init({
+          appMetadata: {
+            name: "Comptara",
+            description: "Blockchain Accounting Platform",
+            icon: "https://comptara.com/icon.png"
+          },
+          network: "testnet"
+        });
+      }
+
+      // Check if already connected
+      if (hashconnect.connectionState && hashconnect.connectionState.accountIds && hashconnect.connectionState.accountIds.length > 0) {
+        return hashconnect.connectionState.accountIds[0];
+      }
 
       // Find available HashPack extensions
       const foundExtensionData = await hashconnect.findLocalWallets();
       
       if (foundExtensionData.length === 0) {
-        throw new Error('HashPack wallet not found');
+        // Fallback: try direct connection or prompt manual connection
+        const manualAccountId = prompt('HashPack non détecté. Entrez manuellement votre Account ID Hedera (format: 0.0.xxxxx):');
+        if (manualAccountId && /^0\.0\.\d+$/.test(manualAccountId)) {
+          // Store manual connection in localStorage
+          localStorage.setItem('hashpack_manual_account', manualAccountId);
+          return manualAccountId;
+        }
+        throw new Error('HashPack wallet not found and no valid manual Account ID provided');
       }
 
       // Connect to HashPack
       const connectionData = await hashconnect.connectToLocalWallet(foundExtensionData[0].id);
       
       if (connectionData.accountIds && connectionData.accountIds.length > 0) {
+        // Clear any manual connection
+        localStorage.removeItem('hashpack_manual_account');
         return connectionData.accountIds[0];
       }
       
@@ -68,13 +85,25 @@ export const connectHashPack = async (): Promise<string> => {
       throw error;
     }
   } else {
-    // Fallback: open HashPack website
+    // Manual connection fallback
+    const manualAccountId = prompt('HashPack non installé. Entrez manuellement votre Account ID Hedera (format: 0.0.xxxxx) ou installez HashPack:');
+    if (manualAccountId && /^0\.0\.\d+$/.test(manualAccountId)) {
+      localStorage.setItem('hashpack_manual_account', manualAccountId);
+      return manualAccountId;
+    }
+    // Open HashPack website
     window.open('https://www.hashpack.app/', '_blank');
     throw new Error('HashPack extension not installed. Please install HashPack and try again.');
   }
 };
 
 export const getHashPackAddress = async (): Promise<string | null> => {
+  // Check manual connection first
+  const manualAccount = localStorage.getItem('hashpack_manual_account');
+  if (manualAccount && /^0\.0\.\d+$/.test(manualAccount)) {
+    return manualAccount;
+  }
+
   if (typeof window !== 'undefined' && (window as any).hashconnect) {
     try {
       const hashconnect = (window as any).hashconnect;

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
@@ -20,11 +21,35 @@ const Index = () => {
   const [payments, setPayments] = useState<any[]>([]);
   const { toast } = useToast();
 
+  // Load data from localStorage
+  const loadStoredData = (address: string) => {
+    const storedEntries = localStorage.getItem(`comptara_entries_${address}`);
+    const storedPayments = localStorage.getItem(`comptara_payments_${address}`);
+    
+    if (storedEntries) {
+      setEntries(JSON.parse(storedEntries));
+    }
+    if (storedPayments) {
+      setPayments(JSON.parse(storedPayments));
+    }
+  };
+
+  // Save data to localStorage
+  const saveDataToStorage = (address: string, newEntries?: any[], newPayments?: any[]) => {
+    if (newEntries) {
+      localStorage.setItem(`comptara_entries_${address}`, JSON.stringify(newEntries));
+    }
+    if (newPayments) {
+      localStorage.setItem(`comptara_payments_${address}`, JSON.stringify(newPayments));
+    }
+  };
+
   // Auto-detect previously connected wallet (MetaMask/HashPack)
   const onWalletConnected = (address: string, type: WalletType) => {
     setIsConnected(true);
     setWalletAddress(address);
     setWalletType(type);
+    loadStoredData(address); // Load stored data for this wallet
     toast({ title: 'Wallet connected', description: `${type.toUpperCase()} - ${address.slice(0,8)}...` });
   };
 
@@ -54,6 +79,8 @@ const Index = () => {
       const account = await connectWallet();
       setIsConnected(true);
       setWalletAddress(account);
+      setWalletType('metamask');
+      loadStoredData(account); // Load stored data for this wallet
       toast({
         title: "Portefeuille connecté",
         description: `Connecté à Hedera Testnet avec ${account.slice(0, 8)}...`,
@@ -71,11 +98,19 @@ const Index = () => {
   };
 
   const handleEntryAdded = (entry: any) => {
-    setEntries(prev => [entry, ...prev]);
+    const newEntries = [entry, ...entries];
+    setEntries(newEntries);
+    if (walletAddress) {
+      saveDataToStorage(walletAddress, newEntries, undefined);
+    }
   };
 
   const handlePaymentAdded = (payment: any) => {
-    setPayments(prev => [payment, ...prev]);
+    const newPayments = [payment, ...payments];
+    setPayments(newPayments);
+    if (walletAddress) {
+      saveDataToStorage(walletAddress, undefined, newPayments);
+    }
   };
 
   const handleExportData = async () => {
@@ -159,14 +194,17 @@ const Index = () => {
                 </div>
               </div>
               
-              <Button 
-                onClick={handleConnect} 
-                className="w-full bg-gradient-primary hover:opacity-90 transition-all duration-300 glow"
-                size="lg"
-              >
-                <Wallet className="h-5 w-5 mr-2" />
-                Connecter MetaMask
-              </Button>
+              <div className="flex items-center justify-between">
+                <Button 
+                  onClick={handleConnect} 
+                  className="flex-1 mr-2 bg-gradient-primary hover:opacity-90 transition-all duration-300 glow touch-manipulation"
+                  size="lg"
+                >
+                  <Wallet className="h-5 w-5 mr-2" />
+                  Connecter MetaMask
+                </Button>
+                <ThemeToggle />
+              </div>
             </CardContent>
           </Card>
         </div>

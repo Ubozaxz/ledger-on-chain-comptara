@@ -88,7 +88,7 @@ export const WalletConnector = ({
             variant="ghost"
             size="sm"
             onClick={toggleLanguage}
-            className="hover:bg-accent"
+            className="hover:bg-accent touch-manipulation"
           >
             <Globe className="h-4 w-4 mr-2" />
             {i18n.language === 'fr' ? 'EN' : 'FR'}
