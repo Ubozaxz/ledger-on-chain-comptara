@@ -131,7 +131,7 @@ export const WalletConnector = ({
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <Button
-                    className="w-full h-16 flex items-center justify-start space-x-4 bg-gradient-primary hover:opacity-90"
+                    className="w-full h-16 flex items-center justify-start space-x-4 bg-gradient-primary hover:opacity-90 touch-manipulation"
                     onClick={() => handleConnect('metamask')}
                     disabled={isConnecting || !isWalletInstalled('metamask')}
                   >
@@ -149,7 +149,7 @@ export const WalletConnector = ({
                   </Button>
 
                   <Button
-                    className="w-full h-16 flex items-center justify-start space-x-4 bg-gradient-secondary hover:opacity-90"
+                    className="w-full h-16 flex items-center justify-start space-x-4 bg-gradient-secondary hover:opacity-90 touch-manipulation"
                     onClick={() => handleConnect('hashpack')}
                     disabled={isConnecting}
                   >
