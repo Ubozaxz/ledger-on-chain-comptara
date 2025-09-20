@@ -1,73 +1,49 @@
-# Welcome to your Lovable project
+# Welcome to your COMPTARA finance 
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/6d21e022-4ef7-4a6e-9540-d0d8dcf92d5e
+**URL**: https://lovable.dev/projects/6d21e022-4ef7-4a6e-9540-d0d8dcf92d5e 
 
-## How can I edit this code?
+# Comptara On-Chain Ledger
 
-There are several ways of editing your application.
+[![Hedera Africa 2025](https://img.shields.io/badge/Hedera-Africa%202025-blueviolet)](https://dorahacks.io/hackathon/hederahackafrica) [![MIT License](https://img.shields.io/badge/License-MIT-green)](LICENSE) [![Hedera Testnet](https://img.shields.io/badge/Network-Hedera%20Testnet-orange)](https://testnet.hashscan.io)
 
-**Use Lovable**
+## Overview
+Comptara On-Chain Ledger is a decentralized accounting platform on **Hedera Testnet**, enabling secure, transparent recording of payments, invoices, and audits. Integrated with **Hedera Hashpack wallet**, it supports on-chain transactions, offline sync, and PDF/CSV exports. Built for the **Hedera Africa Hackathon 2025** (Onchain Finance Track).
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/6d21e022-4ef7-4a6e-9540-d0d8dcf92d5e) and start prompting.
+### Key Features
+- On-chain recording with tx hash (verifiable on HashScan).
+- Hashpack wallet for secure transactions.
+- Offline mode with auto-sync.
+- Report exports (PDF/CSV, local/Google Drive).
+- Automated audit dashboard.
 
-Changes made via Lovable will be committed automatically to this repo.
+## Tech Stack
+- **Blockchain:** Hedera Testnet (Consensus Service).
+- **Wallet:** Hedera Hashpack.
+- **Frontend:** React (via Lovable).
+- **Backend:** Node.js, @hashgraph/sdk.
+- **Storage:** LocalStorage, IPFS.
 
-**Use your preferred IDE**
+## Quick Start
+1. Clone: `git clone https://github.com/votreusername/comptara-on-chain-ledger.git`
+2. Install: `npm install`
+3. Set `.env`: `HEDERA_NETWORK=testnet`, Hashpack account ID.
+4. Run: `npm start` (open http://localhost:3000).
+5. Deploy: `npm run deploy` (Vercel/Netlify).
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Hackathon Submission
+- **Track:** Onchain Finance.
+- **Impact:** Reduces audit costs by 70%; Empowers African SMEs.
+- Submit via [DoraHacks](https://dorahacks.io/hackathon/hederahackafrica).
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Contributing
+Fork, PR, test on Testnet. Join our Discord for collaboration.
 
-Follow these steps:
+## License
+MIT – Free to use and scale.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/6d21e022-4ef7-4a6e-9540-d0d8dcf92d5e) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## Contact
+- Email: [allanbeugre@gmail.com]
+- LinkedIn : [ https://www.linkedin.com/in/alan-emmanuel-559544360?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app ]
+- Built for Hedera Africa Hackathon 2025 by [Alan promé].
