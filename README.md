@@ -47,3 +47,5 @@ MIT – Free to use and scale.
 - Email: [allanbeugre@gmail.com]
 - LinkedIn : [ https://www.linkedin.com/in/alan-emmanuel-559544360?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app ]
 - Built for Hedera Africa Hackathon 2025 by [Alan promé].
+- https://docs.google.com/presentation/d/1gaUem38BfM6raHT6PEEPZ_c87yOvduO50fVbu0lODUw/edit?usp=drivesdk (pitchdeck)
+- 
