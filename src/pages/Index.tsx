@@ -5,11 +5,15 @@ import { JournalEntry } from "@/components/accounting/JournalEntry";
 import { EntriesHistory } from "@/components/accounting/EntriesHistory";
 import { PaymentForm } from "@/components/payments/PaymentForm";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
+import { VoiceToEntry } from "@/components/ai/VoiceToEntry";
+import { AuditModule } from "@/components/ai/AuditModule";
+import { FileAnalyzer } from "@/components/ai/FileAnalyzer";
+import { AIChat } from "@/components/ai/AIChat";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash } from "lucide-react";
+import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash, Bot, Mic, ShieldCheck } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 
@@ -281,44 +285,51 @@ const Index = () => {
 
         {/* Main Content */}
         <Tabs defaultValue="dashboard" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-4 bg-card border">
-            <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Dashboard
+          <TabsList className="grid w-full grid-cols-5 bg-card border">
+            <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
+              <BarChart3 className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Dashboard</span>
             </TabsTrigger>
-            <TabsTrigger value="journal" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <BookOpen className="h-4 w-4 mr-2" />
-              Journal
+            <TabsTrigger value="journal" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
+              <BookOpen className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Journal</span>
             </TabsTrigger>
-            <TabsTrigger value="payments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <CreditCard className="h-4 w-4 mr-2" />
-              Paiements
+            <TabsTrigger value="payments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
+              <CreditCard className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Paiements</span>
             </TabsTrigger>
-            <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <FileBarChart className="h-4 w-4 mr-2" />
-              Rapports
+            <TabsTrigger value="ai" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
+              <Bot className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">IA</span>
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
+              <FileBarChart className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Rapports</span>
             </TabsTrigger>
           </TabsList>
           
           <TabsContent value="dashboard" className="space-y-6">
-            <Card className="card-modern">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <BarChart3 className="h-5 w-5 text-primary" />
-                  <span>Vue d'ensemble</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">
-                    Consultez vos statistiques et l'activité récente de votre comptabilité blockchain.
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Toutes les opérations sont enregistrées de manière permanente sur Hedera Testnet.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            <AuditModule entries={entries} payments={payments} />
+            <AIChat ledgerData={{ entries, payments }} />
+          </TabsContent>
+          
+          <TabsContent value="ai" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <VoiceToEntry onEntryExtracted={(entry) => {
+                if (entry.montant) {
+                  handleEntryAdded({
+                    id: Date.now().toString(),
+                    date: new Date().toISOString(),
+                    description: entry.description || 'Écriture vocale',
+                    debit: entry.type === 'debit' ? entry.categorie || 'Divers' : '',
+                    credit: entry.type === 'credit' ? entry.categorie || 'Divers' : '',
+                    montant: entry.montant,
+                    txHash: entry.txHash || '',
+                  });
+                }
+              }} />
+              <FileAnalyzer />
+            </div>
           </TabsContent>
           
           <TabsContent value="journal" className="space-y-6">
