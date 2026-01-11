@@ -5,15 +5,17 @@ import { JournalEntry } from "@/components/accounting/JournalEntry";
 import { EntriesHistory } from "@/components/accounting/EntriesHistory";
 import { PaymentForm } from "@/components/payments/PaymentForm";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
+import { AnalyticsCharts } from "@/components/dashboard/AnalyticsCharts";
 import { VoiceToEntry } from "@/components/ai/VoiceToEntry";
 import { AuditModule } from "@/components/ai/AuditModule";
 import { FileAnalyzer } from "@/components/ai/FileAnalyzer";
 import { AIChat } from "@/components/ai/AIChat";
+import { useCloudData } from "@/hooks/useCloudData";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash, Bot, Mic, ShieldCheck } from "lucide-react";
+import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash, Bot, RefreshCw, Cloud } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 
@@ -21,39 +23,16 @@ const Index = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletType, setWalletType] = useState<WalletType | null>(null);
-  const [entries, setEntries] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
   const { toast } = useToast();
-
-  // Load data from localStorage
-  const loadStoredData = (address: string) => {
-    const storedEntries = localStorage.getItem(`comptara_entries_${address}`);
-    const storedPayments = localStorage.getItem(`comptara_payments_${address}`);
-    
-    if (storedEntries) {
-      setEntries(JSON.parse(storedEntries));
-    }
-    if (storedPayments) {
-      setPayments(JSON.parse(storedPayments));
-    }
-  };
-
-  // Save data to localStorage
-  const saveDataToStorage = (address: string, newEntries?: any[], newPayments?: any[]) => {
-    if (newEntries) {
-      localStorage.setItem(`comptara_entries_${address}`, JSON.stringify(newEntries));
-    }
-    if (newPayments) {
-      localStorage.setItem(`comptara_payments_${address}`, JSON.stringify(newPayments));
-    }
-  };
+  
+  // Use cloud data hook for persistence
+  const { entries, payments, isLoading, addEntry, addPayment, refreshData } = useCloudData(walletAddress);
 
   // Auto-detect previously connected wallet (MetaMask/HashPack)
   const onWalletConnected = (address: string, type: WalletType) => {
     setIsConnected(true);
     setWalletAddress(address);
     setWalletType(type);
-    loadStoredData(address); // Load stored data for this wallet
     toast({ title: 'Wallet connected', description: `${type.toUpperCase()} - ${address.slice(0,8)}...` });
   };
 
@@ -84,7 +63,6 @@ const Index = () => {
       setIsConnected(true);
       setWalletAddress(account);
       setWalletType('metamask');
-      loadStoredData(account); // Load stored data for this wallet
       toast({
         title: "Portefeuille connecté",
         description: `Connecté à Hedera Testnet avec ${account.slice(0, 8)}...`,
@@ -101,20 +79,34 @@ const Index = () => {
     toast({ title: "Déconnecté", description: "Portefeuille déconnecté" });
   };
 
-  const handleEntryAdded = (entry: any) => {
-    const newEntries = [entry, ...entries];
-    setEntries(newEntries);
-    if (walletAddress) {
-      saveDataToStorage(walletAddress, newEntries, undefined);
-    }
+  const handleEntryAdded = async (entry: any) => {
+    await addEntry({
+      wallet_address: walletAddress || '',
+      date: entry.date || new Date().toISOString().split('T')[0],
+      libelle: entry.libelle || entry.description || 'Écriture comptable',
+      debit: entry.debit || '',
+      credit: entry.credit || '',
+      montant: parseFloat(entry.montant) || 0,
+      devise: entry.devise || 'HBAR',
+      tx_hash: entry.txHash || '',
+      description: entry.description,
+      category: entry.category
+    });
+    toast({ title: 'Écriture enregistrée', description: 'Sauvegardée dans le Cloud' });
   };
 
-  const handlePaymentAdded = (payment: any) => {
-    const newPayments = [payment, ...payments];
-    setPayments(newPayments);
-    if (walletAddress) {
-      saveDataToStorage(walletAddress, undefined, newPayments);
-    }
+  const handlePaymentAdded = async (payment: any) => {
+    await addPayment({
+      wallet_address: walletAddress || '',
+      type: payment.type || 'paiement',
+      destinataire: payment.destinataire || '',
+      montant: parseFloat(payment.montant) || 0,
+      devise: payment.devise || 'HBAR',
+      objet: payment.objet || '',
+      tx_hash: payment.txHash || '',
+      status: 'confirmed'
+    });
+    toast({ title: 'Transaction enregistrée', description: 'Sauvegardée dans le Cloud' });
   };
 
   const handleExportData = async () => {
@@ -159,53 +151,52 @@ const Index = () => {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
-      <WalletConnector 
-        isConnected={isConnected}
-        walletAddress={walletAddress}
-        walletType={walletType}
-        onConnect={onWalletConnected}
-        onDisconnect={handleDisconnect}
-      />
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 pb-16">
+        <WalletConnector 
+          isConnected={isConnected}
+          walletAddress={walletAddress}
+          walletType={walletType}
+          onConnect={onWalletConnected}
+          onDisconnect={handleDisconnect}
+        />
         
-        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
-          <Card className="w-full max-w-md mx-4 card-modern">
-            <CardHeader className="text-center">
+        <div className="flex items-center justify-center min-h-[calc(100vh-120px)] px-4">
+          <Card className="w-full max-w-md card-modern">
+            <CardHeader className="text-center p-4 md:p-6">
               <div className="flex justify-center mb-4">
-                <div className="h-16 w-16 bg-gradient-primary rounded-full flex items-center justify-center">
-                  <Wallet className="h-8 w-8 text-white" />
+                <div className="h-14 w-14 md:h-16 md:w-16 bg-gradient-primary rounded-full flex items-center justify-center">
+                  <Wallet className="h-7 w-7 md:h-8 md:w-8 text-white" />
                 </div>
               </div>
-              <CardTitle className="text-2xl text-gradient">Connexion requise</CardTitle>
+              <CardTitle className="text-xl md:text-2xl text-gradient">Connexion requise</CardTitle>
             </CardHeader>
-            <CardContent className="text-center space-y-6">
-              <p className="text-muted-foreground leading-relaxed">
-                Connectez votre portefeuille MetaMask pour accéder à <strong>comptara</strong> et commencer à enregistrer vos écritures comptables sur Hedera Testnet.
+            <CardContent className="text-center space-y-4 md:space-y-6 p-4 md:p-6">
+              <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
+                Connectez votre portefeuille pour accéder à <strong>Comptara</strong> et commencer à enregistrer vos écritures comptables sur Hedera Testnet.
               </p>
               
-              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+              <div className="bg-muted/50 rounded-lg p-3 md:p-4 space-y-2">
                 <div className="flex items-center justify-center space-x-2">
                   <div className="h-2 w-2 bg-success rounded-full"></div>
-                  <span className="text-sm text-muted-foreground">Hedera Testnet</span>
+                  <span className="text-xs md:text-sm text-muted-foreground">Hedera Testnet</span>
                 </div>
                 <div className="flex items-center justify-center space-x-2">
                   <div className="h-2 w-2 bg-primary rounded-full"></div>
-                  <span className="text-sm text-muted-foreground">Transactions sécurisées</span>
+                  <span className="text-xs md:text-sm text-muted-foreground">Transactions sécurisées</span>
                 </div>
                 <div className="flex items-center justify-center space-x-2">
                   <div className="h-2 w-2 bg-warning rounded-full"></div>
-                  <span className="text-sm text-muted-foreground">Audit trail complet</span>
+                  <span className="text-xs md:text-sm text-muted-foreground">Persistance Cloud</span>
                 </div>
               </div>
               
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <Button 
                   onClick={handleConnect} 
-                  className="flex-1 mr-2 bg-gradient-primary hover:opacity-90 transition-all duration-300 glow touch-manipulation"
-                  size="lg"
+                  className="flex-1 bg-gradient-primary hover:opacity-90 transition-all duration-300 glow touch-manipulation h-11 md:h-12 text-sm md:text-base"
                 >
-                  <Wallet className="h-5 w-5 mr-2" />
-                  Connecter MetaMask
+                  <Wallet className="h-4 w-4 md:h-5 md:w-5 mr-2" />
+                  Connecter Wallet
                 </Button>
                 <ThemeToggle />
               </div>
@@ -217,7 +208,7 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pb-20">
       <WalletConnector 
         isConnected={isConnected}
         walletAddress={walletAddress}
@@ -226,105 +217,123 @@ const Index = () => {
         onDisconnect={handleDisconnect}
       />
       
-      <div className="container mx-auto px-4 py-8 space-y-8">
-        {/* Dashboard Overview */}
+      <div className="container mx-auto px-3 md:px-4 py-4 md:py-8 space-y-4 md:space-y-8">
+        {/* Cloud Status & Dashboard Overview */}
+        <div className="flex items-center justify-between mb-2">
+          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">
+            <Cloud className="h-3 w-3 mr-1" />
+            Cloud Sync Active
+          </Badge>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={refreshData}
+            disabled={isLoading}
+            className="h-8 px-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+
         <DashboardStats entries={entries} payments={payments} />
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Quick Actions - Mobile Optimized */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-6">
           <Card className="card-modern">
-            <CardContent className="p-6">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Réseau</p>
+                <div className="space-y-1 md:space-y-2">
+                  <p className="text-xs md:text-sm font-medium text-muted-foreground">Réseau</p>
                   <div className="flex items-center space-x-2">
                     <div className="h-2 w-2 bg-success rounded-full animate-pulse"></div>
-                    <Badge variant="outline" className="text-success border-success/20">
+                    <Badge variant="outline" className="text-success border-success/20 text-xs">
                       Hedera Testnet
                     </Badge>
                   </div>
                 </div>
-                <Wallet className="h-8 w-8 text-success" />
+                <Wallet className="h-6 w-6 md:h-8 md:w-8 text-success" />
               </div>
             </CardContent>
           </Card>
           
           <Card className="card-modern">
-            <CardContent className="p-6">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Dernière transaction</p>
-                  <p className="text-sm text-foreground">
+                <div className="space-y-1 md:space-y-2">
+                  <p className="text-xs md:text-sm font-medium text-muted-foreground">Dernière transaction</p>
+                  <p className="text-xs md:text-sm text-foreground">
                     {entries.length > 0 || payments.length > 0 
                       ? "Il y a quelques instants" 
                       : "Aucune transaction"}
                   </p>
                 </div>
-                <Hash className="h-8 w-8 text-primary" />
+                <Hash className="h-6 w-6 md:h-8 md:w-8 text-primary" />
               </div>
             </CardContent>
           </Card>
           
           <Card className="card-modern">
-            <CardContent className="p-6">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Export disponible</p>
-                  <Badge variant="outline" className="text-primary border-primary/20">
+                <div className="space-y-1 md:space-y-2">
+                  <p className="text-xs md:text-sm font-medium text-muted-foreground">Export disponible</p>
+                  <Badge variant="outline" className="text-primary border-primary/20 text-xs">
                     JSON • PDF
                   </Badge>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleExportData} className="hover:bg-primary hover:text-primary-foreground">
+                <Button variant="outline" size="sm" onClick={handleExportData} className="hover:bg-primary hover:text-primary-foreground h-8 px-2 md:px-3">
                   <Download className="h-4 w-4 mr-1" />
-                  Exporter
+                  <span className="hidden sm:inline">Export</span>
                 </Button>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Content */}
-        <Tabs defaultValue="dashboard" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-5 bg-card border">
-            <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
-              <BarChart3 className="h-4 w-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">Dashboard</span>
+        {/* Main Content - Mobile First Tabs */}
+        <Tabs defaultValue="dashboard" className="space-y-4 md:space-y-8">
+          <TabsList className="grid w-full grid-cols-5 bg-card border h-auto p-1">
+            <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
+              <BarChart3 className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline text-xs">Dashboard</span>
             </TabsTrigger>
-            <TabsTrigger value="journal" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
-              <BookOpen className="h-4 w-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">Journal</span>
+            <TabsTrigger value="journal" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
+              <BookOpen className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline text-xs">Journal</span>
             </TabsTrigger>
-            <TabsTrigger value="payments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
-              <CreditCard className="h-4 w-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">Paiements</span>
+            <TabsTrigger value="payments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
+              <CreditCard className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline text-xs">Paiements</span>
             </TabsTrigger>
-            <TabsTrigger value="ai" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
-              <Bot className="h-4 w-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">IA</span>
+            <TabsTrigger value="ai" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
+              <Bot className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline text-xs">IA</span>
             </TabsTrigger>
-            <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs md:text-sm">
-              <FileBarChart className="h-4 w-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">Rapports</span>
+            <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
+              <FileBarChart className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline text-xs">Rapports</span>
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="dashboard" className="space-y-6">
+          <TabsContent value="dashboard" className="space-y-4 md:space-y-6">
+            <AnalyticsCharts entries={entries} payments={payments} />
             <AuditModule entries={entries} payments={payments} />
             <AIChat ledgerData={{ entries, payments }} />
           </TabsContent>
           
-          <TabsContent value="ai" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TabsContent value="ai" className="space-y-4 md:space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
               <VoiceToEntry onEntryExtracted={(entry) => {
                 if (entry.montant) {
                   handleEntryAdded({
-                    id: Date.now().toString(),
-                    date: new Date().toISOString(),
-                    description: entry.description || 'Écriture vocale',
+                    date: new Date().toISOString().split('T')[0],
+                    libelle: entry.description || 'Écriture vocale',
                     debit: entry.type === 'debit' ? entry.categorie || 'Divers' : '',
                     credit: entry.type === 'credit' ? entry.categorie || 'Divers' : '',
                     montant: entry.montant,
+                    devise: entry.devise || 'HBAR',
                     txHash: entry.txHash || '',
+                    description: entry.description,
                   });
                 }
               }} />
@@ -332,21 +341,22 @@ const Index = () => {
             </div>
           </TabsContent>
           
-          <TabsContent value="journal" className="space-y-6">
+          <TabsContent value="journal" className="space-y-4 md:space-y-6">
             <JournalEntry onEntryAdded={handleEntryAdded} />
             <EntriesHistory entries={entries} />
           </TabsContent>
           
-          <TabsContent value="payments" className="space-y-6">
+          <TabsContent value="payments" className="space-y-4 md:space-y-6">
             <PaymentForm onPaymentAdded={handlePaymentAdded} />
             {payments.length > 0 && (
               <Card className="card-modern">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
+                <CardHeader className="p-4 md:p-6">
+                  <CardTitle className="flex items-center justify-between text-base md:text-lg">
                     <span>Historique des paiements ({payments.length})</span>
                     <Button
                       variant="outline"
                       size="sm"
+                      className="h-8 text-xs"
                       onClick={async () => {
                         try {
                           const { generatePaymentProofPDF } = await import("@/lib/pdf-generator");
@@ -366,45 +376,47 @@ const Index = () => {
                         }
                       }}
                     >
-                      <Download className="h-4 w-4 mr-1" />
-                      Tous les PDFs
+                      <Download className="h-3 w-3 md:h-4 md:w-4 mr-1" />
+                      <span className="hidden sm:inline">Tous les PDFs</span>
+                      <span className="sm:hidden">PDFs</span>
                     </Button>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3 md:space-y-4 p-3 md:p-6">
                   {payments.map((payment) => (
                     <Card key={payment.id} className="border border-border/50 hover:shadow-lg transition-all duration-300">
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-2">
-                            <h4 className="font-medium text-foreground">{payment.objet}</h4>
-                            <p className="text-sm text-muted-foreground">
+                      <CardContent className="p-3 md:p-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+                          <div className="space-y-1 md:space-y-2 min-w-0 flex-1">
+                            <h4 className="font-medium text-foreground text-sm md:text-base truncate">{payment.objet}</h4>
+                            <p className="text-xs md:text-sm text-muted-foreground">
                               {payment.type === 'paiement' ? 'Paiement vers' : 'Encaissement de'}: 
                               <span className="font-mono ml-1">{payment.destinataire.slice(0, 12)}...</span>
                             </p>
                             <div className="flex items-center space-x-2">
-                              <Hash className="h-3 w-3 text-muted-foreground" />
+                              <Hash className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                               <a
-                                href={`https://hashscan.io/testnet/transaction/${payment.txHash}`}
+                                href={`https://hashscan.io/testnet/transaction/${payment.tx_hash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs font-mono text-primary hover:underline"
+                                className="text-xs font-mono text-primary hover:underline truncate"
                               >
-                                {payment.txHash}
+                                {payment.tx_hash}
                               </a>
                             </div>
                           </div>
-                          <div className="text-right space-y-2">
-                            <p className="font-semibold text-lg text-foreground">
+                          <div className="text-right space-y-1 md:space-y-2 flex-shrink-0">
+                            <p className="font-semibold text-base md:text-lg text-foreground">
                               {payment.montant} {payment.devise}
                             </p>
-                            <Badge variant="default" className="bg-success/10 text-success border-success/20">
+                            <Badge variant="default" className="bg-success/10 text-success border-success/20 text-xs">
                               Confirmé
                             </Badge>
                             <div className="flex space-x-1">
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="h-7 text-xs"
                                 onClick={async () => {
                                   try {
                                     const { generatePaymentProofPDF } = await import("@/lib/pdf-generator");
@@ -435,22 +447,22 @@ const Index = () => {
             )}
           </TabsContent>
           
-          <TabsContent value="reports" className="space-y-6">
+          <TabsContent value="reports" className="space-y-4 md:space-y-6">
             <Card className="card-modern">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <FileBarChart className="h-5 w-5 text-primary" />
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="flex items-center space-x-2 text-base md:text-lg">
+                  <FileBarChart className="h-4 w-4 md:h-5 md:w-5 text-primary" />
                   <span>Rapports et exports</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <CardContent className="space-y-4 md:space-y-6 p-4 md:p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                   <Button
                     onClick={handleExportData}
-                    className="h-20 flex-col space-y-2 bg-gradient-primary hover:opacity-90"
+                    className="h-16 md:h-20 flex-col space-y-1 md:space-y-2 bg-gradient-primary hover:opacity-90"
                   >
-                    <Download className="h-6 w-6" />
-                    <span>Export complet (JSON + PDF)</span>
+                    <Download className="h-5 w-5 md:h-6 md:w-6" />
+                    <span className="text-xs md:text-sm">Export complet (JSON + PDF)</span>
                   </Button>
                   
                   <Button
@@ -469,8 +481,8 @@ const Index = () => {
                         
                         const csvContent = [
                           "Type,Date,Montant,Devise,Description,Hash",
-                          ...entries.map(e => `Ecriture,${e.date},${e.montant},${e.devise},"${e.libelle}",${e.txHash}`),
-                          ...payments.map(p => `${p.type},${new Date(p.timestamp).toISOString().split('T')[0]},${p.montant},${p.devise},"${p.objet}",${p.txHash}`)
+                          ...entries.map(e => `Ecriture,${e.date},${e.montant},${e.devise},"${e.libelle}",${e.tx_hash}`),
+                          ...payments.map(p => `${p.type},${new Date(p.created_at).toISOString().split('T')[0]},${p.montant},${p.devise},"${p.objet}",${p.tx_hash}`)
                         ].join('\n');
                         
                         const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -493,16 +505,16 @@ const Index = () => {
                         });
                       }
                     }}
-                    className="h-20 flex-col space-y-2"
+                    className="h-16 md:h-20 flex-col space-y-1 md:space-y-2"
                   >
-                    <FileBarChart className="h-6 w-6" />
-                    <span>Export CSV</span>
+                    <FileBarChart className="h-5 w-5 md:h-6 md:w-6" />
+                    <span className="text-xs md:text-sm">Export CSV</span>
                   </Button>
                 </div>
                 
-                <div className="bg-muted/50 rounded-lg p-4">
-                  <h4 className="font-medium text-foreground mb-2">Informations d'export</h4>
-                  <ul className="text-sm text-muted-foreground space-y-1">
+                <div className="bg-muted/50 rounded-lg p-3 md:p-4">
+                  <h4 className="font-medium text-foreground mb-2 text-sm md:text-base">Informations d'export</h4>
+                  <ul className="text-xs md:text-sm text-muted-foreground space-y-1">
                     <li>• JSON: Format structuré avec métadonnées complètes</li>
                     <li>• PDF: Rapport visuel avec QR codes pour vérification</li>
                     <li>• CSV: Compatible avec Excel et logiciels comptables</li>
