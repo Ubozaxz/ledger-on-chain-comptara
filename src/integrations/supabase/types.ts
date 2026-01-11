@@ -14,7 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      accounting_entries: {
+        Row: {
+          category: string | null
+          created_at: string
+          credit: string | null
+          date: string
+          debit: string | null
+          description: string | null
+          devise: string | null
+          id: string
+          libelle: string
+          montant: number
+          tx_hash: string | null
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          credit?: string | null
+          date?: string
+          debit?: string | null
+          description?: string | null
+          devise?: string | null
+          id?: string
+          libelle: string
+          montant: number
+          tx_hash?: string | null
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          credit?: string | null
+          date?: string
+          debit?: string | null
+          description?: string | null
+          devise?: string | null
+          id?: string
+          libelle?: string
+          montant?: number
+          tx_hash?: string | null
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          created_at: string
+          destinataire: string
+          devise: string | null
+          id: string
+          montant: number
+          objet: string | null
+          status: string | null
+          tx_hash: string
+          type: string
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          destinataire: string
+          devise?: string | null
+          id?: string
+          montant: number
+          objet?: string | null
+          status?: string | null
+          tx_hash: string
+          type: string
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          destinataire?: string
+          devise?: string | null
+          id?: string
+          montant?: number
+          objet?: string | null
+          status?: string | null
+          tx_hash?: string
+          type?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

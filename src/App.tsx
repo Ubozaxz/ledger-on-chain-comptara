@@ -24,8 +24,8 @@ const App = () => (
         <Sonner />
         
         {/* Footer signature */}
-        <footer className="fixed bottom-0 left-0 right-0 text-center text-xs text-muted-foreground/70 bg-black/30 backdrop-blur-sm py-2 border-t border-border/20">
-          Designed by Promé • Made by Alan promé for Hedera
+        <footer className="fixed bottom-0 left-0 right-0 z-50 text-center text-xs text-muted-foreground/70 bg-background/80 backdrop-blur-sm py-3 border-t border-border/20 safe-area-bottom">
+          designed by promé
         </footer>
       </TooltipProvider>
     </ThemeProvider>
