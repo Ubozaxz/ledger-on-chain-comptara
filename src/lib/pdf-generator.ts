@@ -1,29 +1,34 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 
-interface EntryData {
+// Cloud-compatible types (snake_case from database)
+export interface EntryData {
   id: string;
   date: string;
   libelle: string;
-  montant: string;
+  montant: number | string;
   devise: string;
-  compteDebit: string;
-  compteCredit: string;
-  txHash: string;
-  timestamp: string;
-  status: string;
+  debit?: string;
+  credit?: string;
+  tx_hash?: string;
+  created_at?: string;
+  updated_at?: string;
+  wallet_address?: string;
+  description?: string;
+  category?: string;
 }
 
-interface PaymentData {
+export interface PaymentData {
   id: string;
   type: string;
   destinataire: string;
-  montant: string;
+  montant: number | string;
   devise: string;
   objet: string;
-  txHash: string;
-  timestamp: string;
-  status: string;
+  tx_hash?: string;
+  created_at?: string;
+  status?: string;
+  wallet_address?: string;
 }
 
 export async function generateEntryProofPDF(entry: EntryData): Promise<void> {
@@ -43,15 +48,18 @@ export async function generateEntryProofPDF(entry: EntryData): Promise<void> {
   doc.setFontSize(12);
   let yPos = 80;
   
+  const txHash = entry.tx_hash || '';
+  const timestamp = entry.created_at || new Date().toISOString();
+  
   const details = [
     ['Date:', new Date(entry.date).toLocaleDateString('fr-FR')],
     ['Libellé:', entry.libelle],
     ['Montant:', `${entry.montant} ${entry.devise}`],
-    ['Compte débit:', entry.compteDebit],
-    ['Compte crédit:', entry.compteCredit],
-    ['Hash transaction:', entry.txHash],
-    ['Timestamp blockchain:', new Date(entry.timestamp).toLocaleString('fr-FR')],
-    ['Statut:', entry.status === 'success' ? 'Confirmé' : 'Échec'],
+    ['Compte débit:', entry.debit || '-'],
+    ['Compte crédit:', entry.credit || '-'],
+    ['Hash transaction:', txHash || '-'],
+    ['Timestamp blockchain:', new Date(timestamp).toLocaleString('fr-FR')],
+    ['Statut:', 'Confirmé'],
   ];
   
   details.forEach(([label, value]) => {
@@ -67,7 +75,7 @@ export async function generateEntryProofPDF(entry: EntryData): Promise<void> {
   
   // QR Code
   try {
-    const qrCodeDataURL = await QRCode.toDataURL(entry.txHash, {
+    const qrCodeDataURL = await QRCode.toDataURL(txHash || entry.id, {
       width: 100,
       margin: 1,
     });
@@ -110,14 +118,17 @@ export async function generatePaymentProofPDF(payment: PaymentData): Promise<voi
   doc.setFontSize(12);
   let yPos = 80;
   
+  const txHash = payment.tx_hash || '';
+  const timestamp = payment.created_at || new Date().toISOString();
+  
   const details = [
     ['Type:', payment.type === 'paiement' ? 'Paiement fournisseur' : 'Encaissement client'],
     ['Destinataire:', payment.destinataire],
     ['Montant:', `${payment.montant} ${payment.devise}`],
     ['Objet:', payment.objet],
-    ['Hash transaction:', payment.txHash],
-    ['Timestamp:', new Date(payment.timestamp).toLocaleString('fr-FR')],
-    ['Statut:', payment.status === 'success' ? 'Confirmé' : 'Échec'],
+    ['Hash transaction:', txHash || '-'],
+    ['Timestamp:', new Date(timestamp).toLocaleString('fr-FR')],
+    ['Statut:', payment.status === 'confirmed' ? 'Confirmé' : 'Échec'],
   ];
   
   details.forEach(([label, value]) => {
@@ -133,7 +144,7 @@ export async function generatePaymentProofPDF(payment: PaymentData): Promise<voi
   
   // QR Code
   try {
-    const qrCodeDataURL = await QRCode.toDataURL(payment.txHash, {
+    const qrCodeDataURL = await QRCode.toDataURL(txHash || payment.id, {
       width: 100,
       margin: 1,
     });
@@ -206,7 +217,7 @@ export function generateFullExportPDF(entries: EntryData[], payments: PaymentDat
       doc.text(`${index + 1}. ${entry.libelle} - ${entry.montant} ${entry.devise}`, 20, yPos);
       yPos += 7;
       doc.setFontSize(10);
-      doc.text(`   Hash: ${entry.txHash}`, 20, yPos);
+      doc.text(`   Hash: ${entry.tx_hash || '-'}`, 20, yPos);
       yPos += 7;
       doc.text(`   Date: ${new Date(entry.date).toLocaleDateString('fr-FR')}`, 20, yPos);
       yPos += 12;
@@ -236,7 +247,7 @@ export function generateFullExportPDF(entries: EntryData[], payments: PaymentDat
       doc.text(`${index + 1}. ${payment.objet} - ${payment.montant} ${payment.devise}`, 20, yPos);
       yPos += 7;
       doc.setFontSize(10);
-      doc.text(`   Hash: ${payment.txHash}`, 20, yPos);
+      doc.text(`   Hash: ${payment.tx_hash || '-'}`, 20, yPos);
       yPos += 7;
       doc.text(`   Type: ${payment.type}`, 20, yPos);
       yPos += 12;
