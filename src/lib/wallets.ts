@@ -1,12 +1,74 @@
 import { getEthereum, ensureHederaTestnet, HEDERA_TESTNET } from './hedera';
 
-export type WalletType = 'metamask' | 'hashpack';
+export type WalletType = 'metamask' | 'hashpack' | 'trust';
 
 export interface WalletInfo {
   type: WalletType;
   address: string;
   connected: boolean;
 }
+
+// Check if running on mobile
+export const isMobile = (): boolean => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
+// Check if Trust Wallet is available
+export const isTrustWalletAvailable = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const { trustwallet, ethereum } = window as any;
+  return !!(trustwallet || ethereum?.isTrust);
+};
+
+// Get Trust Wallet provider
+export const getTrustWalletProvider = (): any => {
+  if (typeof window === 'undefined') return null;
+  const { trustwallet, ethereum } = window as any;
+  if (trustwallet) return trustwallet;
+  if (ethereum?.isTrust) return ethereum;
+  return null;
+};
+
+// Connect Trust Wallet
+export const connectTrustWallet = async (): Promise<string> => {
+  const provider = getTrustWalletProvider();
+  
+  if (!provider) {
+    // On mobile, open Trust Wallet via deep link
+    if (isMobile()) {
+      const currentUrl = encodeURIComponent(window.location.href);
+      window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${currentUrl}`;
+      throw new Error('Ouverture de Trust Wallet...');
+    }
+    throw new Error('Trust Wallet non détecté. Veuillez installer l\'extension Trust Wallet.');
+  }
+  
+  try {
+    const accounts = await provider.request({ method: 'eth_requestAccounts' });
+    if (accounts && accounts.length > 0) {
+      return accounts[0];
+    }
+    throw new Error('Aucun compte sélectionné');
+  } catch (error: any) {
+    if (error.code === 4001) {
+      throw new Error('Connexion refusée par l\'utilisateur');
+    }
+    throw error;
+  }
+};
+
+// Get Trust Wallet address if connected
+export const getTrustWalletAddress = async (): Promise<string | null> => {
+  const provider = getTrustWalletProvider();
+  if (!provider) return null;
+  
+  try {
+    const accounts = await provider.request({ method: 'eth_accounts' });
+    return accounts?.[0] || null;
+  } catch {
+    return null;
+  }
+};
 
 // MetaMask wallet functions
 export const connectMetaMask = async (): Promise<string> => {
@@ -182,9 +244,11 @@ export const isWalletInstalled = (type: WalletType): boolean => {
     if (typeof window === 'undefined') return false;
     switch (type) {
       case 'metamask':
-        return !!(window as any).ethereum; // do NOT call getEthereum here to avoid throw in some envs
+        return !!(window as any).ethereum;
       case 'hashpack':
         return !!(window as any).hashconnect;
+      case 'trust':
+        return isTrustWalletAvailable();
       default:
         return false;
     }
