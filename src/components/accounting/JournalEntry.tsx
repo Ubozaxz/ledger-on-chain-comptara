@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BookOpen, Hash } from "lucide-react";
+import { BookOpen, Hash, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { isMobile, getEthereum } from "@/lib/hedera";
 
 interface JournalEntryProps {
   onEntryAdded: (entry: any) => void;
@@ -37,6 +38,17 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
       return;
     }
 
+    // Check if wallet is connected
+    const ethereum = getEthereum();
+    if (!ethereum) {
+      toast({
+        title: "Wallet non connecté",
+        description: "Connectez votre wallet pour ancrer l'écriture sur la blockchain",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -49,11 +61,14 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
       const txHash = await anchorEntryData(payload);
 
       const entry = {
-        id: Date.now().toString(),
-        ...formData,
+        date: formData.date,
+        libelle: formData.libelle,
+        montant: formData.montant,
+        devise: formData.devise,
+        debit: formData.compteDebit,
+        credit: formData.compteCredit,
         txHash,
-        timestamp: payload.timestamp,
-        status: "success",
+        description: formData.libelle,
       };
 
       onEntryAdded(entry);
@@ -66,7 +81,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
             <div className="flex items-center space-x-2">
               <Hash className="h-4 w-4" />
               <a href={getExplorerTxUrl(txHash)} target="_blank" rel="noreferrer" className="font-mono text-xs text-primary hover:underline">
-                {txHash}
+                {txHash.slice(0, 16)}...
               </a>
             </div>
           </div>
@@ -83,6 +98,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
         compteCredit: "",
       });
     } catch (err: any) {
+      console.error("JournalEntry error:", err);
       toast({
         title: "Échec de l'enregistrement",
         description: err?.message || "Une erreur est survenue",
