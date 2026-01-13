@@ -17,7 +17,12 @@ export const isMobile = (): boolean => {
 export const isTrustWalletAvailable = (): boolean => {
   if (typeof window === 'undefined') return false;
   const { trustwallet, ethereum } = window as any;
-  return !!(trustwallet || ethereum?.isTrust);
+  return !!(
+    trustwallet ||
+    ethereum?.isTrust ||
+    ethereum?.isTrustWallet ||
+    ethereum?.isTrustWalletApp
+  );
 };
 
 // Get Trust Wallet provider
@@ -25,24 +30,25 @@ export const getTrustWalletProvider = (): any => {
   if (typeof window === 'undefined') return null;
   const { trustwallet, ethereum } = window as any;
   if (trustwallet) return trustwallet;
-  if (ethereum?.isTrust) return ethereum;
+  if (ethereum?.isTrust || ethereum?.isTrustWallet || ethereum?.isTrustWalletApp) return ethereum;
   return null;
 };
 
 // Connect Trust Wallet
 export const connectTrustWallet = async (): Promise<string> => {
   const provider = getTrustWalletProvider();
-  
+
   if (!provider) {
     // On mobile, open Trust Wallet via deep link
     if (isMobile()) {
+      localStorage.setItem('comptara_pending_wallet', 'trust');
       const currentUrl = encodeURIComponent(window.location.href);
       window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${currentUrl}`;
       throw new Error('Ouverture de Trust Wallet...');
     }
-    throw new Error('Trust Wallet non détecté. Veuillez installer l\'extension Trust Wallet.');
+    throw new Error('Trust Wallet non détecté. Veuillez activer l\'extension Trust Wallet.');
   }
-  
+
   try {
     const accounts = await provider.request({ method: 'eth_requestAccounts' });
     if (accounts && accounts.length > 0) {
@@ -73,8 +79,17 @@ export const getTrustWalletAddress = async (): Promise<string | null> => {
 // MetaMask wallet functions
 export const connectMetaMask = async (): Promise<string> => {
   const ethereum = getEthereum();
+
+  // Mobile: if user is in a normal browser (no injected provider), open MetaMask dapp browser
+  if (!ethereum && isMobile()) {
+    localStorage.setItem('comptara_pending_wallet', 'metamask');
+    const hostPath = `${window.location.host}${window.location.pathname}${window.location.search}`;
+    window.location.href = `https://metamask.app.link/dapp/${hostPath}`;
+    throw new Error('Ouverture de MetaMask...');
+  }
+
   if (!ethereum) {
-    throw new Error('MetaMask not found');
+    throw new Error('MetaMask non détecté. Ouvrez ce site dans le navigateur intégré de MetaMask.');
   }
 
   await ensureHederaTestnet();

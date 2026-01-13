@@ -116,12 +116,11 @@ export const FileAnalyzer = () => {
     setIsAnalyzing(true);
 
     try {
+      const { buildJsonHeaders } = await import('@/lib/auth-headers');
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-accountant`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
+        headers: await buildJsonHeaders(),
         body: JSON.stringify({
           action: "analyze-file",
           fileData: fileData.slice(0, 100), // Limit to first 100 rows
