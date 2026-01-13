@@ -9,6 +9,10 @@ const HEDERA_TESTNET = {
   blockExplorerUrls: ["https://hashscan.io/testnet"],
 } as const;
 
+export const isMobile = (): boolean => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
 export function getEthereum(): any | null {
   if (typeof window !== "undefined" && (window as any).ethereum) {
     return (window as any).ethereum;
