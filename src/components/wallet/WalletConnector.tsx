@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Wallet, Shield, LogOut, Globe, Smartphone, Monitor, Loader2 } from 'lucide-react';
-import { WalletType, connectMetaMask, connectHashPack, connectTrustWallet, isWalletInstalled, formatAddress, isMobile, isTrustWalletAvailable } from '@/lib/wallets';
+import { Wallet, Shield, LogOut, Globe, Smartphone, Monitor, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
+import { WalletType, connectMetaMask, connectHashPack, connectTrustWallet, isWalletInstalled, formatAddress, isMobile, isTrustWalletAvailable, isInWalletBrowser } from '@/lib/wallets';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 
@@ -28,24 +28,36 @@ export const WalletConnector = ({
   const { toast } = useToast();
   const [isConnecting, setIsConnecting] = useState<WalletType | null>(null);
   const [showWalletDialog, setShowWalletDialog] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const isMobileDevice = isMobile();
+  const inWalletBrowser = isInWalletBrowser();
 
+  // Auto-detect wallet in in-app browser
   useEffect(() => {
-    const pending = localStorage.getItem('comptara_pending_wallet') as WalletType | null;
-    if (!pending) return;
-
-    localStorage.removeItem('comptara_pending_wallet');
-    setShowWalletDialog(true);
-
-    // give time for the in-app browser to inject the provider
-    setTimeout(() => {
-      handleConnect(pending);
-    }, 400);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (inWalletBrowser && !isConnected) {
+      // Small delay to let provider inject
+      setTimeout(async () => {
+        try {
+          // Try MetaMask-compatible provider first
+          const { getEthereum } = await import('@/lib/hedera');
+          const ethereum = getEthereum();
+          if (ethereum) {
+            const accounts = await ethereum.request({ method: 'eth_accounts' });
+            if (accounts && accounts.length > 0) {
+              onConnect(accounts[0], ethereum.isTrust ? 'trust' : 'metamask');
+            }
+          }
+        } catch {
+          // Silent - user will connect manually
+        }
+      }, 500);
+    }
+  }, [inWalletBrowser, isConnected, onConnect]);
 
   const handleConnect = async (type: WalletType) => {
     setIsConnecting(type);
+    setConnectionError(null);
+
     try {
       let address: string;
       
@@ -67,15 +79,13 @@ export const WalletConnector = ({
     } catch (error) {
       console.error('Wallet connection error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      setConnectionError(errorMessage);
       
-      // Don't show error for redirect messages
-      if (!errorMessage.includes('Ouverture')) {
-        toast({
-          title: 'Échec de connexion',
-          description: errorMessage,
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Échec de connexion',
+        description: errorMessage,
+        variant: 'destructive',
+      });
     } finally {
       setIsConnecting(null);
     }
@@ -84,6 +94,20 @@ export const WalletConnector = ({
   const toggleLanguage = () => {
     const newLang = i18n.language === 'fr' ? 'en' : 'fr';
     i18n.changeLanguage(newLang);
+  };
+
+  const openInWallet = (walletType: 'metamask' | 'trust') => {
+    const currentUrl = window.location.href;
+    let deepLink = '';
+    
+    if (walletType === 'metamask') {
+      const hostPath = `${window.location.host}${window.location.pathname}`;
+      deepLink = `https://metamask.app.link/dapp/${hostPath}`;
+    } else {
+      deepLink = `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(currentUrl)}`;
+    }
+    
+    window.location.href = deepLink;
   };
 
   return (
@@ -158,75 +182,109 @@ export const WalletConnector = ({
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-4">
-                  {/* MetaMask */}
-                  <Button
-                    variant="outline"
-                    className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
-                    onClick={() => handleConnect('metamask')}
-                    disabled={isConnecting !== null}
-                  >
-                    {isConnecting === 'metamask' ? (
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                    ) : (
-                      <span className="text-2xl">🦊</span>
-                    )}
-                    <div className="text-left flex-1 min-w-0">
-                      <div className="font-semibold text-sm md:text-base">MetaMask</div>
-                      <div className="text-xs text-muted-foreground flex items-center space-x-1">
-                        {isMobileDevice ? (
-                          <>
-                            <Smartphone className="h-3 w-3" />
-                            <span>App mobile ou extension</span>
-                          </>
-                        ) : (
-                          <>
-                            <Monitor className="h-3 w-3" />
-                            <span>Extension navigateur</span>
-                          </>
-                        )}
-                      </div>
+                  {/* Connection Error */}
+                  {connectionError && (
+                    <div className="flex items-start space-x-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                      <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-destructive">{connectionError}</p>
                     </div>
-                    {isWalletInstalled('metamask') && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Détecté
-                      </Badge>
+                  )}
+
+                  {/* MetaMask */}
+                  <div className="space-y-2">
+                    <Button
+                      variant="outline"
+                      className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
+                      onClick={() => handleConnect('metamask')}
+                      disabled={isConnecting !== null}
+                    >
+                      {isConnecting === 'metamask' ? (
+                        <Loader2 className="h-8 w-8 animate-spin" />
+                      ) : (
+                        <span className="text-2xl">🦊</span>
+                      )}
+                      <div className="text-left flex-1 min-w-0">
+                        <div className="font-semibold text-sm md:text-base">MetaMask</div>
+                        <div className="text-xs text-muted-foreground flex items-center space-x-1">
+                          {isMobileDevice ? (
+                            <>
+                              <Smartphone className="h-3 w-3" />
+                              <span>{inWalletBrowser ? 'Connecter' : 'Ouvrir dans MetaMask'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Monitor className="h-3 w-3" />
+                              <span>Extension navigateur</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {isWalletInstalled('metamask') && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Détecté
+                        </Badge>
+                      )}
+                    </Button>
+                    {isMobileDevice && !isWalletInstalled('metamask') && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs text-muted-foreground"
+                        onClick={() => openInWallet('metamask')}
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" />
+                        Ouvrir dans l'app MetaMask
+                      </Button>
                     )}
-                  </Button>
+                  </div>
 
                   {/* Trust Wallet */}
-                  <Button
-                    variant="outline"
-                    className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
-                    onClick={() => handleConnect('trust')}
-                    disabled={isConnecting !== null}
-                  >
-                    {isConnecting === 'trust' ? (
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                    ) : (
-                      <span className="text-2xl">🔵</span>
-                    )}
-                    <div className="text-left flex-1 min-w-0">
-                      <div className="font-semibold text-sm md:text-base">Trust Wallet</div>
-                      <div className="text-xs text-muted-foreground flex items-center space-x-1">
-                        {isMobileDevice ? (
-                          <>
-                            <Smartphone className="h-3 w-3" />
-                            <span>App mobile</span>
-                          </>
-                        ) : (
-                          <>
-                            <Monitor className="h-3 w-3" />
-                            <span>Extension navigateur</span>
-                          </>
-                        )}
+                  <div className="space-y-2">
+                    <Button
+                      variant="outline"
+                      className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
+                      onClick={() => handleConnect('trust')}
+                      disabled={isConnecting !== null}
+                    >
+                      {isConnecting === 'trust' ? (
+                        <Loader2 className="h-8 w-8 animate-spin" />
+                      ) : (
+                        <span className="text-2xl">🔵</span>
+                      )}
+                      <div className="text-left flex-1 min-w-0">
+                        <div className="font-semibold text-sm md:text-base">Trust Wallet</div>
+                        <div className="text-xs text-muted-foreground flex items-center space-x-1">
+                          {isMobileDevice ? (
+                            <>
+                              <Smartphone className="h-3 w-3" />
+                              <span>{inWalletBrowser ? 'Connecter' : 'Ouvrir dans Trust'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Monitor className="h-3 w-3" />
+                              <span>Extension navigateur</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    {isTrustWalletAvailable() && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Détecté
-                      </Badge>
+                      {isTrustWalletAvailable() && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Détecté
+                        </Badge>
+                      )}
+                    </Button>
+                    {isMobileDevice && !isTrustWalletAvailable() && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs text-muted-foreground"
+                        onClick={() => openInWallet('trust')}
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" />
+                        Ouvrir dans l'app Trust Wallet
+                      </Button>
                     )}
-                  </Button>
+                  </div>
 
                   {/* HashPack */}
                   <Button
@@ -247,12 +305,13 @@ export const WalletConnector = ({
                   </Button>
 
                   {/* Mobile info */}
-                  {isMobileDevice && (
+                  {isMobileDevice && !inWalletBrowser && (
                     <div className="flex items-start space-x-2 p-3 bg-muted/50 rounded-lg">
                       <Smartphone className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-muted-foreground">
-                        Sur mobile, l'app wallet s'ouvrira automatiquement.
-                      </p>
+                      <div className="text-xs text-muted-foreground">
+                        <p className="font-medium">Sur mobile?</p>
+                        <p>Ouvrez ce site dans le navigateur intégré de votre wallet (MetaMask ou Trust Wallet) pour une connexion directe.</p>
+                      </div>
                     </div>
                   )}
 
