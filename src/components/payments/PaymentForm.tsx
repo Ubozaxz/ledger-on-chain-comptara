@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CreditCard, Hash, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { CreditCard, Hash, ArrowUpRight, ArrowDownLeft, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { getEthereum } from "@/lib/hedera";
 
 interface PaymentFormProps {
   onPaymentAdded: (payment: any) => void;
@@ -36,6 +37,17 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
       return;
     }
 
+    // Check if wallet is connected
+    const ethereum = getEthereum();
+    if (!ethereum) {
+      toast({
+        title: "Wallet non connecté",
+        description: "Connectez votre wallet pour effectuer la transaction",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -43,11 +55,12 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
       const txHash = await sendHBAR({ to: paymentData.destinataire, amountHBAR: paymentData.montant });
 
       const payment = {
-        id: Date.now().toString(),
-        ...paymentData,
+        type: paymentData.type,
+        destinataire: paymentData.destinataire,
+        montant: paymentData.montant,
+        devise: paymentData.devise,
+        objet: paymentData.objet,
         txHash,
-        timestamp: new Date().toISOString(),
-        status: "success",
       };
 
       onPaymentAdded(payment);
@@ -61,7 +74,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
             <div className="flex items-center space-x-2">
               <Hash className="h-4 w-4" />
               <a href={getExplorerTxUrl(txHash)} target="_blank" rel="noreferrer" className="font-mono text-xs text-primary hover:underline">
-                {txHash}
+                {txHash.slice(0, 16)}...
               </a>
             </div>
           </div>
@@ -77,6 +90,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
         objet: "",
       });
     } catch (err: any) {
+      console.error("PaymentForm error:", err);
       toast({
         title: "Échec de la transaction",
         description: err?.message || "Une erreur est survenue",
