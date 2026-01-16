@@ -1,10 +1,11 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { FileSpreadsheet, Upload, Loader2, Send, X, FileText } from "lucide-react";
+import { FileSpreadsheet, Upload, Loader2, MessageSquare, Send, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 
@@ -54,10 +55,8 @@ export const FileAnalyzer = () => {
       return parseCsv(file);
     } else if (extension === 'xlsx' || extension === 'xls') {
       return parseExcel(file);
-    } else if (extension === 'pdf') {
-      return parsePdf(file);
     } else {
-      throw new Error("Format non supporté. Utilisez .xlsx, .xls, .csv ou .pdf");
+      throw new Error("Format non supporté. Utilisez .xlsx, .xls ou .csv");
     }
   };
 
@@ -68,17 +67,10 @@ export const FileAnalyzer = () => {
         try {
           const text = e.target?.result as string;
           const lines = text.split('\n').filter(l => l.trim());
-          if (lines.length === 0) {
-            resolve([]);
-            return;
-          }
-          
-          // Handle different delimiters
-          const delimiter = lines[0].includes(';') ? ';' : ',';
-          const headers = lines[0].split(delimiter).map(h => h.trim().replace(/"/g, ''));
+          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
           
           const data = lines.slice(1).map(line => {
-            const values = line.split(delimiter).map(v => v.trim().replace(/"/g, ''));
+            const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
             const row: any = {};
             headers.forEach((h, i) => {
               row[h] = values[i] || '';
@@ -102,62 +94,16 @@ export const FileAnalyzer = () => {
       reader.onload = (e) => {
         try {
           const data = e.target?.result;
-          // Use ArrayBuffer instead of BinaryString for better mobile compatibility
-          const workbook = XLSX.read(data, { type: 'array' });
+          const workbook = XLSX.read(data, { type: 'binary' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const jsonData = XLSX.utils.sheet_to_json(firstSheet);
           resolve(jsonData as any[]);
         } catch (error) {
-          console.error("Excel parsing error:", error);
-          reject(new Error("Erreur de parsing Excel. Vérifiez le format du fichier."));
+          reject(new Error("Erreur de parsing Excel"));
         }
       };
       reader.onerror = () => reject(new Error("Erreur de lecture du fichier"));
-      reader.readAsArrayBuffer(file); // Changed from readAsBinaryString for iOS compatibility
-    });
-  };
-
-  const parsePdf = async (file: File): Promise<any[]> => {
-    // For PDF, we'll extract text content via backend
-    try {
-      const base64 = await fileToBase64(file);
-      
-      const { buildJsonHeaders } = await import('@/lib/auth-headers');
-      
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-accountant`, {
-        method: "POST",
-        headers: await buildJsonHeaders(),
-        body: JSON.stringify({
-          action: "extract-pdf",
-          pdfBase64: base64,
-          fileName: file.name,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Échec de l'extraction PDF");
-      }
-
-      const result = await response.json();
-      
-      // Return extracted text as a single-row dataset for analysis
-      return [{ content: result.text || "Contenu extrait du PDF", source: file.name }];
-    } catch (error) {
-      console.error("PDF parsing error:", error);
-      // Fallback: create a simple entry with file info
-      return [{ content: `Fichier PDF: ${file.name}`, note: "Extraction automatique non disponible - décrivez le contenu manuellement" }];
-    }
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = (reader.result as string).split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+      reader.readAsBinaryString(file);
     });
   };
 
@@ -183,8 +129,7 @@ export const FileAnalyzer = () => {
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Erreur ${response.status}`);
+        throw new Error("Failed to analyze file");
       }
 
       // Parse streaming response
@@ -222,14 +167,6 @@ export const FileAnalyzer = () => {
             }
           }
         }
-      }
-
-      // If no streaming content was received, show error
-      if (!fullResponse) {
-        setConversation(prev => [...prev, { 
-          role: "assistant", 
-          content: "Analyse terminée. Posez une autre question pour plus de détails." 
-        }]);
       }
     } catch (error: any) {
       console.error("Analysis error:", error);
@@ -271,13 +208,13 @@ export const FileAnalyzer = () => {
         {!fileData ? (
           <div className="space-y-4">
             <div 
-              className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer touch-manipulation"
+              className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
               onClick={() => fileInputRef.current?.click()}
             >
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls,.csv,.pdf"
+                accept=".xlsx,.xls,.csv"
                 onChange={handleFileUpload}
                 className="hidden"
               />
@@ -290,17 +227,7 @@ export const FileAnalyzer = () => {
                 <div className="flex flex-col items-center space-y-2">
                   <Upload className="h-12 w-12 text-muted-foreground" />
                   <p className="text-sm font-medium">Glissez ou cliquez pour uploader</p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      <FileSpreadsheet className="h-3 w-3 mr-1" />
-                      Excel
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">CSV</Badge>
-                    <Badge variant="outline" className="text-xs">
-                      <FileText className="h-3 w-3 mr-1" />
-                      PDF
-                    </Badge>
-                  </div>
+                  <p className="text-xs text-muted-foreground">Formats: .xlsx, .xls, .csv</p>
                 </div>
               )}
             </div>
@@ -311,7 +238,7 @@ export const FileAnalyzer = () => {
             <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
               <div className="flex items-center space-x-2">
                 <FileSpreadsheet className="h-5 w-5 text-primary" />
-                <span className="text-sm font-medium truncate max-w-[200px]">{fileName}</span>
+                <span className="text-sm font-medium">{fileName}</span>
               </div>
               <Badge variant="secondary">{fileData.length} lignes</Badge>
             </div>

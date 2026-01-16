@@ -5,8 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { CreditCard, Hash, ArrowUpRight, ArrowDownLeft, Link2, Loader2 } from "lucide-react";
+import { CreditCard, Hash, ArrowUpRight, ArrowDownLeft, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 import { getEthereum } from "@/lib/hedera";
@@ -18,17 +17,14 @@ interface PaymentFormProps {
 export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
   const { t } = useTranslation();
   const [paymentData, setPaymentData] = useState({
-    type: "paiement",
+    type: "paiement", // paiement ou encaissement
     destinataire: "",
     montant: "",
     devise: "HBAR",
     objet: "",
   });
-  const [executeOnChain, setExecuteOnChain] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
-
-  const hasWallet = !!getEthereum();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,28 +37,22 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
       return;
     }
 
+    // Check if wallet is connected
+    const ethereum = getEthereum();
+    if (!ethereum) {
+      toast({
+        title: "Wallet non connecté",
+        description: "Connectez votre wallet pour effectuer la transaction",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
-      let txHash = "";
-
-      // Only execute on-chain if user opted in AND wallet is available
-      if (executeOnChain && hasWallet) {
-        const { sendHBAR, getExplorerTxUrl } = await import("@/lib/hedera");
-        txHash = await sendHBAR({ to: paymentData.destinataire, amountHBAR: paymentData.montant });
-
-        toast({
-          title: "Transaction blockchain réussie",
-          description: (
-            <div className="flex items-center space-x-2">
-              <Hash className="h-4 w-4" />
-              <a href={getExplorerTxUrl(txHash)} target="_blank" rel="noreferrer" className="font-mono text-xs text-primary hover:underline">
-                {txHash.slice(0, 16)}...
-              </a>
-            </div>
-          ),
-        });
-      }
+      const { sendHBAR, getExplorerTxUrl } = await import("@/lib/hedera");
+      const txHash = await sendHBAR({ to: paymentData.destinataire, amountHBAR: paymentData.montant });
 
       const payment = {
         type: paymentData.type,
@@ -76,8 +66,19 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
       onPaymentAdded(payment);
 
       toast({
-        title: `${paymentData.type === 'paiement' ? 'Paiement' : 'Encaissement'} enregistré`,
-        description: `${paymentData.montant} ${paymentData.devise} - ${txHash ? 'Exécuté on-chain' : 'Sauvegardé en cloud'}`,
+        title: `${paymentData.type === 'paiement' ? 'Paiement' : 'Encaissement'} effectué`,
+        description: (
+          <div className="space-y-2">
+            <p>Montant: {paymentData.montant} {paymentData.devise}</p>
+            <p>Destinataire: {paymentData.destinataire.slice(0, 8)}...</p>
+            <div className="flex items-center space-x-2">
+              <Hash className="h-4 w-4" />
+              <a href={getExplorerTxUrl(txHash)} target="_blank" rel="noreferrer" className="font-mono text-xs text-primary hover:underline">
+                {txHash.slice(0, 16)}...
+              </a>
+            </div>
+          </div>
+        ),
       });
 
       // Reset form
@@ -141,7 +142,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
               <Label htmlFor="destinataire">{t('recipient')} *</Label>
               <Input
                 id="destinataire"
-                placeholder={executeOnChain ? "0x742d35Cc..." : "Nom ou adresse"}
+                placeholder="0x742d35Cc..."
                 value={paymentData.destinataire}
                 onChange={(e) => setPaymentData({ ...paymentData, destinataire: e.target.value })}
                 required
@@ -189,39 +190,14 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
             />
           </div>
 
-          {/* Blockchain execution toggle */}
-          <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-            <div className="flex items-center space-x-3">
-              <Link2 className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-sm font-medium">Exécuter sur blockchain</p>
-                <p className="text-xs text-muted-foreground">
-                  {hasWallet 
-                    ? "Envoyer réellement des HBAR via votre wallet" 
-                    : "Connectez un wallet EVM pour activer"}
-                </p>
-              </div>
-            </div>
-            <Switch
-              checked={executeOnChain}
-              onCheckedChange={setExecuteOnChain}
-              disabled={!hasWallet}
-            />
-          </div>
-
           <Button 
             type="submit" 
             className="w-full bg-primary hover:bg-primary-hover"
             disabled={isProcessing}
           >
-            {isProcessing ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {executeOnChain ? "Transaction en cours..." : "Enregistrement..."}
-              </>
-            ) : (
-              paymentData.type === 'paiement' ? "Enregistrer le paiement" : "Confirmer l'encaissement"
-            )}
+            {isProcessing ? "Transaction en cours..." : 
+              paymentData.type === 'paiement' ? "Effectuer le paiement" : "Confirmer l'encaissement"
+            }
           </Button>
         </form>
       </CardContent>
