@@ -3,10 +3,22 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { History, Hash, ExternalLink, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { AccountingEntry } from "@/hooks/useCloudData";
+
+interface Entry {
+  id: string;
+  date: string;
+  libelle: string;
+  montant: string;
+  devise: string;
+  compteDebit: string;
+  compteCredit: string;
+  txHash: string;
+  timestamp: string;
+  status: string;
+}
 
 interface EntriesHistoryProps {
-  entries: AccountingEntry[];
+  entries: Entry[];
 }
 
 export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
@@ -20,21 +32,20 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
     return new Date(timestamp).toLocaleString('fr-FR');
   };
 
-  const handleViewExplorer = (txHash: string | null) => {
-    if (!txHash) return;
+  const handleViewExplorer = (txHash: string) => {
     import("@/lib/hedera").then(({ getExplorerTxUrl }) => {
       const url = getExplorerTxUrl(txHash);
       window.open(url, "_blank", "noopener,noreferrer");
     });
   };
 
-  const handleGenerateProof = async (entry: AccountingEntry) => {
+  const handleGenerateProof = async (entry: Entry) => {
     try {
       const { generateEntryProofPDF } = await import("@/lib/pdf-generator");
       await generateEntryProofPDF(entry);
       toast({
         title: "Justificatif généré",
-        description: `PDF téléchargé pour la transaction ${entry.tx_hash?.slice(0, 8) || entry.id.slice(0, 8)}...`,
+        description: `PDF téléchargé pour la transaction ${entry.txHash.slice(0, 8)}...`,
       });
     } catch (error) {
       toast({
@@ -81,15 +92,15 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
                   <div className="space-y-1">
                     <h4 className="font-medium text-foreground">{entry.libelle}</h4>
                     <p className="text-sm text-muted-foreground">
-                      {formatDate(entry.date)} • {formatTimestamp(entry.created_at)}
+                      {formatDate(entry.date)} • {formatTimestamp(entry.timestamp)}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-lg text-foreground">
                       {entry.montant} {entry.devise}
                     </p>
-                    <Badge variant="default">
-                      Confirmé
+                    <Badge variant={entry.status === 'success' ? 'default' : 'destructive'}>
+                      {entry.status === 'success' ? 'Confirmé' : 'Échec'}
                     </Badge>
                   </div>
                 </div>
@@ -97,11 +108,11 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="font-medium text-muted-foreground">Débit: </span>
-                    <span className="text-foreground">{entry.debit || '-'}</span>
+                    <span className="text-foreground">{entry.compteDebit}</span>
                   </div>
                   <div>
                     <span className="font-medium text-muted-foreground">Crédit: </span>
-                    <span className="text-foreground">{entry.credit || '-'}</span>
+                    <span className="text-foreground">{entry.compteCredit}</span>
                   </div>
                 </div>
 
@@ -109,15 +120,14 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
                   <div className="flex items-center space-x-2">
                     <Hash className="h-4 w-4 text-muted-foreground" />
                     <span className="font-mono text-xs text-muted-foreground">
-                      {entry.tx_hash || '-'}
+                      {entry.txHash}
                     </span>
                   </div>
                   <div className="flex space-x-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleViewExplorer(entry.tx_hash)}
-                      disabled={!entry.tx_hash}
+                      onClick={() => handleViewExplorer(entry.txHash)}
                     >
                       <ExternalLink className="h-4 w-4 mr-1" />
                       Explorer

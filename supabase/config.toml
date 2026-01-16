@@ -1,7 +1,0 @@
-project_id = "snarururqaerearvbwzb"
-
-[functions.ai-accountant]
-verify_jwt = false
-
-[functions.voice-transcribe]
-verify_jwt = false

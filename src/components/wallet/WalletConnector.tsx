@@ -1,13 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Wallet, Shield, LogOut, Globe, Smartphone, Monitor, Loader2 } from 'lucide-react';
-import { WalletType, connectMetaMask, connectHashPack, connectTrustWallet, isWalletInstalled, formatAddress, isMobile, isTrustWalletAvailable } from '@/lib/wallets';
+import { Wallet, Shield, LogOut, Globe } from 'lucide-react';
+import { WalletType, connectMetaMask, connectHashPack, isWalletInstalled, formatAddress } from '@/lib/wallets';
 import { useToast } from '@/hooks/use-toast';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 interface WalletConnectorProps {
   isConnected: boolean;
@@ -26,33 +25,16 @@ export const WalletConnector = ({
 }: WalletConnectorProps) => {
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
-  const [isConnecting, setIsConnecting] = useState<WalletType | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [showWalletDialog, setShowWalletDialog] = useState(false);
-  const isMobileDevice = isMobile();
-
-  useEffect(() => {
-    const pending = localStorage.getItem('comptara_pending_wallet') as WalletType | null;
-    if (!pending) return;
-
-    localStorage.removeItem('comptara_pending_wallet');
-    setShowWalletDialog(true);
-
-    // give time for the in-app browser to inject the provider
-    setTimeout(() => {
-      handleConnect(pending);
-    }, 400);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleConnect = async (type: WalletType) => {
-    setIsConnecting(type);
+    setIsConnecting(true);
     try {
       let address: string;
       
       if (type === 'metamask') {
         address = await connectMetaMask();
-      } else if (type === 'trust') {
-        address = await connectTrustWallet();
       } else {
         address = await connectHashPack();
       }
@@ -61,23 +43,19 @@ export const WalletConnector = ({
       setShowWalletDialog(false);
       
       toast({
-        title: 'Wallet connecté',
-        description: `${type.toUpperCase()} connecté sur Hedera Testnet`,
+        title: t('entrySuccess'),
+        description: `${t(type)} connecté - ${formatAddress(address)}`,
       });
     } catch (error) {
       console.error('Wallet connection error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
-      
-      // Don't show error for redirect messages
-      if (!errorMessage.includes('Ouverture')) {
-        toast({
-          title: 'Échec de connexion',
-          description: errorMessage,
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: t('connectionError'),
+        description: errorMessage,
+        variant: 'destructive',
+      });
     } finally {
-      setIsConnecting(null);
+      setIsConnecting(false);
     }
   };
 
@@ -88,45 +66,43 @@ export const WalletConnector = ({
 
   return (
     <Card className="border-0 rounded-none shadow-lg bg-gradient-card border-b backdrop-blur-sm">
-      <div className="px-3 md:px-6 py-3 md:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-        <div className="flex items-center space-x-2 md:space-x-4 w-full sm:w-auto">
-          <div className="flex items-center space-x-2 md:space-x-3">
-            <div className="h-8 w-8 md:h-10 md:w-10 bg-gradient-primary rounded-lg flex items-center justify-center flex-shrink-0">
-              <Shield className="h-4 w-4 md:h-6 md:w-6 text-white" />
+      <div className="px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            <div className="h-10 w-10 bg-gradient-primary rounded-lg flex items-center justify-center">
+              <Shield className="h-6 w-6 text-white" />
             </div>
-            <div className="min-w-0">
-              <h1 className="text-lg md:text-2xl font-bold text-gradient truncate">{t('appTitle')}</h1>
-              <p className="text-[10px] md:text-xs text-muted-foreground hidden sm:block">{t('appSubtitle')}</p>
+            <div>
+              <h1 className="text-2xl font-bold text-gradient">{t('appTitle')}</h1>
+              <p className="text-xs text-muted-foreground">{t('appSubtitle')}</p>
             </div>
           </div>
-          <Badge variant="outline" className="text-[10px] md:text-xs bg-success/10 text-success border-success/20 flex-shrink-0 hidden sm:flex">
+          <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/20">
             <div className="h-1.5 w-1.5 bg-success rounded-full mr-1 animate-pulse"></div>
             {t('hederaTestnet')}
           </Badge>
         </div>
 
-        <div className="flex items-center space-x-2 md:space-x-4 w-full sm:w-auto justify-between sm:justify-end">
-          <div className="flex items-center space-x-2">
-            <ThemeToggle />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleLanguage}
-              className="hover:bg-accent touch-manipulation h-9 w-9 p-0"
-            >
-              <Globe className="h-4 w-4" />
-            </Button>
-          </div>
+        <div className="flex items-center space-x-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleLanguage}
+            className="hover:bg-accent touch-manipulation"
+          >
+            <Globe className="h-4 w-4 mr-2" />
+            {i18n.language === 'fr' ? 'EN' : 'FR'}
+          </Button>
 
           {isConnected && walletAddress ? (
-            <div className="flex items-center space-x-2 md:space-x-3">
-              <Card className="px-2 md:px-4 py-1.5 md:py-2 bg-gradient-card border-primary/20">
-                <div className="flex items-center space-x-1 md:space-x-2">
-                  <Wallet className="h-3 w-3 md:h-4 md:w-4 text-success" />
-                  <span className="text-xs md:text-sm font-mono text-foreground">
+            <div className="flex items-center space-x-3">
+              <Card className="px-4 py-2 bg-gradient-card border-primary/20">
+                <div className="flex items-center space-x-2">
+                  <Wallet className="h-4 w-4 text-success" />
+                  <span className="text-sm font-mono text-foreground">
                     {formatAddress(walletAddress)}
                   </span>
-                  <Badge variant="secondary" className="text-[10px] md:text-xs hidden sm:inline-flex">
+                  <Badge variant="secondary" className="text-xs">
                     {t(walletType || 'metamask')}
                   </Badge>
                 </div>
@@ -135,132 +111,84 @@ export const WalletConnector = ({
                 variant="outline" 
                 size="sm" 
                 onClick={onDisconnect}
-                className="hover:bg-destructive hover:text-destructive-foreground border-destructive/20 h-9 px-2 md:px-3"
+                className="hover:bg-destructive hover:text-destructive-foreground border-destructive/20"
               >
-                <LogOut className="h-4 w-4" />
-                <span className="ml-2 hidden md:inline">{t('disconnect')}</span>
+                <LogOut className="h-4 w-4 mr-2" />
+                {t('disconnect')}
               </Button>
             </div>
           ) : (
             <Dialog open={showWalletDialog} onOpenChange={setShowWalletDialog}>
               <DialogTrigger asChild>
-                <Button className="bg-gradient-primary hover:opacity-90 glow transition-all duration-300 h-9 md:h-10 px-3 md:px-4 text-sm">
+                <Button className="bg-gradient-primary hover:opacity-90 glow transition-all duration-300">
                   <Wallet className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline">{t('connectWallet')}</span>
-                  <span className="sm:hidden">Connexion</span>
+                  {t('connectWallet')}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="w-[95vw] max-w-md mx-auto">
+              <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle className="text-center text-lg md:text-xl flex items-center justify-center space-x-2">
-                    <Wallet className="h-5 w-5 text-primary" />
-                    <span>Connecter un wallet</span>
-                  </DialogTitle>
+                  <DialogTitle className="text-center">{t('connectWallet')}</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-3 py-4">
-                  {/* MetaMask */}
+                <div className="space-y-4 py-4">
                   <Button
-                    variant="outline"
-                    className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
+                    className="w-full h-16 flex items-center justify-start space-x-4 bg-gradient-primary hover:opacity-90 touch-manipulation"
                     onClick={() => handleConnect('metamask')}
-                    disabled={isConnecting !== null}
+                    disabled={isConnecting || !isWalletInstalled('metamask')}
                   >
-                    {isConnecting === 'metamask' ? (
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                    ) : (
-                      <span className="text-2xl">🦊</span>
-                    )}
-                    <div className="text-left flex-1 min-w-0">
-                      <div className="font-semibold text-sm md:text-base">MetaMask</div>
-                      <div className="text-xs text-muted-foreground flex items-center space-x-1">
-                        {isMobileDevice ? (
-                          <>
-                            <Smartphone className="h-3 w-3" />
-                            <span>App mobile ou extension</span>
-                          </>
-                        ) : (
-                          <>
-                            <Monitor className="h-3 w-3" />
-                            <span>Extension navigateur</span>
-                          </>
-                        )}
-                      </div>
+                    <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center">
+                      <img 
+                        src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTI3LjQ2IDEwLjc1TDE3LjkyIDIuNTVMMTUuNzggNy44M0wyNi4yOCAxMy4yNUwyNy40NiAxMC43NVoiIGZpbGw9IiNFMjc2MjYiLz4KPHN2Zz4K" 
+                        alt="MetaMask"
+                        className="h-6 w-6"
+                      />
                     </div>
-                    {isWalletInstalled('metamask') && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Détecté
-                      </Badge>
-                    )}
+                    <div className="text-left">
+                      <div className="font-semibold text-white">{t('metamask')}</div>
+                      <div className="text-sm text-white/70">Browser Extension</div>
+                    </div>
                   </Button>
 
-                  {/* Trust Wallet */}
                   <Button
-                    variant="outline"
-                    className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
-                    onClick={() => handleConnect('trust')}
-                    disabled={isConnecting !== null}
-                  >
-                    {isConnecting === 'trust' ? (
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                    ) : (
-                      <span className="text-2xl">🔵</span>
-                    )}
-                    <div className="text-left flex-1 min-w-0">
-                      <div className="font-semibold text-sm md:text-base">Trust Wallet</div>
-                      <div className="text-xs text-muted-foreground flex items-center space-x-1">
-                        {isMobileDevice ? (
-                          <>
-                            <Smartphone className="h-3 w-3" />
-                            <span>App mobile</span>
-                          </>
-                        ) : (
-                          <>
-                            <Monitor className="h-3 w-3" />
-                            <span>Extension navigateur</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    {isTrustWalletAvailable() && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Détecté
-                      </Badge>
-                    )}
-                  </Button>
-
-                  {/* HashPack */}
-                  <Button
-                    variant="outline"
-                    className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
+                    className="w-full h-16 flex items-center justify-start space-x-4 bg-gradient-secondary hover:opacity-90 touch-manipulation"
                     onClick={() => handleConnect('hashpack')}
-                    disabled={isConnecting !== null}
+                    disabled={isConnecting}
                   >
-                    {isConnecting === 'hashpack' ? (
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                    ) : (
-                      <span className="text-2xl">📦</span>
-                    )}
-                    <div className="text-left flex-1 min-w-0">
-                      <div className="font-semibold text-sm md:text-base">HashPack</div>
-                      <div className="text-xs text-muted-foreground">Hedera Native Wallet</div>
+                    <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center">
+                      <div className="h-6 w-6 bg-blue-600 rounded"></div>
+                    </div>
+                    <div className="text-left">
+                      <div className="font-semibold text-white">{t('hashpack')}</div>
+                      <div className="text-sm text-white/70">Hedera Native Wallet</div>
                     </div>
                   </Button>
 
-                  {/* Mobile info */}
-                  {isMobileDevice && (
-                    <div className="flex items-start space-x-2 p-3 bg-muted/50 rounded-lg">
-                      <Smartphone className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-muted-foreground">
-                        Sur mobile, l'app wallet s'ouvrira automatiquement.
-                      </p>
-                    </div>
+                  {!isWalletInstalled('metamask') && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      MetaMask non détecté.{' '}
+                      <a
+                        href="https://metamask.io/download/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        Installer MetaMask
+                      </a>
+                    </p>
                   )}
 
-                  <div className="text-center pt-2">
-                    <p className="text-xs text-muted-foreground">
-                      Réseau: <span className="text-success font-medium">Hedera Testnet</span>
+                  {!(typeof window !== 'undefined' && (window as any).hashconnect) && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      HashPack non détecté.{' '}
+                      <a
+                        href="https://www.hashpack.app/download"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        Installer HashPack
+                      </a>
                     </p>
-                  </div>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>

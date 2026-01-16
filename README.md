@@ -49,6 +49,4 @@ MIT – Free to use and scale.
 - Built for Hedera Africa Hackathon 2025 by [Alan promé].
 - https://docs.google.com/presentation/d/1gaUem38BfM6raHT6PEEPZ_c87yOvduO50fVbu0lODUw/edit?usp=drivesdk (pitchdeck)
 -   https://drive.google.com/file/d/1iJXlzUv55l4zO3SR5z1Z1KtQ0-lYFU9v/view?usp=drivesdk  (hedera certificat's link)
-- https://youtu.be/oSkihDDLPG8?si=7xxHSGSjhxM8dM4i  (demo's vidéo of Comptara)
-- 
-Thank you .
+-
