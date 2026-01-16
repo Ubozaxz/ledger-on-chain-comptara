@@ -28,6 +28,7 @@ export type Database = {
           montant: number
           tx_hash: string | null
           updated_at: string
+          user_id: string | null
           wallet_address: string
         }
         Insert: {
@@ -43,6 +44,7 @@ export type Database = {
           montant: number
           tx_hash?: string | null
           updated_at?: string
+          user_id?: string | null
           wallet_address: string
         }
         Update: {
@@ -58,6 +60,7 @@ export type Database = {
           montant?: number
           tx_hash?: string | null
           updated_at?: string
+          user_id?: string | null
           wallet_address?: string
         }
         Relationships: []
@@ -73,6 +76,7 @@ export type Database = {
           status: string | null
           tx_hash: string
           type: string
+          user_id: string | null
           wallet_address: string
         }
         Insert: {
@@ -85,6 +89,7 @@ export type Database = {
           status?: string | null
           tx_hash: string
           type: string
+          user_id?: string | null
           wallet_address: string
         }
         Update: {
@@ -97,7 +102,38 @@ export type Database = {
           status?: string | null
           tx_hash?: string
           type?: string
+          user_id?: string | null
           wallet_address?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string
+          id: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email: string
+          id?: string
+          role?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          id?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

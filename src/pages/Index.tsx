@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { WalletConnector } from "@/components/wallet/WalletConnector";
 import { WalletType } from "@/lib/wallets";
 import { JournalEntry } from "@/components/accounting/JournalEntry";
@@ -10,50 +11,42 @@ import { VoiceToEntry } from "@/components/ai/VoiceToEntry";
 import { AuditModule } from "@/components/ai/AuditModule";
 import { FileAnalyzer } from "@/components/ai/FileAnalyzer";
 import { AIChat } from "@/components/ai/AIChat";
+import { StatusBanner } from "@/components/ui/status-banner";
 import { useCloudData } from "@/hooks/useCloudData";
+import { useAuth } from "@/hooks/useAuth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash, Bot, RefreshCw, Cloud } from "lucide-react";
+import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash, Bot, RefreshCw, Cloud, Loader2, LogIn } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
+  const navigate = useNavigate();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletType, setWalletType] = useState<WalletType | null>(null);
   const { toast } = useToast();
   
-  // Use cloud data hook for persistence
-  const { entries, payments, isLoading, addEntry, addPayment, refreshData } = useCloudData(walletAddress);
+  // Use cloud data hook for persistence (requires auth)
+  const { entries, payments, isLoading, isOnline, pendingSync, addEntry, addPayment, refreshData, syncOfflineQueue } = useCloudData(walletAddress, user?.id ?? null);
 
-  // Auto-detect previously connected wallet (MetaMask/HashPack)
   const onWalletConnected = (address: string, type: WalletType) => {
     setIsConnected(true);
     setWalletAddress(address);
     setWalletType(type);
-    toast({ title: 'Wallet connected', description: `${type.toUpperCase()} - ${address.slice(0,8)}...` });
+    toast({ title: 'Wallet connecté', description: `${type.toUpperCase()} - ${address.slice(0,8)}...` });
   };
 
+  // Redirect if not authenticated
   useEffect(() => {
-    (async () => {
-      try {
-        const { getMetaMaskAddress, getHashPackAddress } = await import('@/lib/wallets');
-        const meta = await getMetaMaskAddress();
-        if (meta) {
-          onWalletConnected(meta, 'metamask');
-          return;
-        }
-        const hash = await getHashPackAddress();
-        if (hash) {
-          onWalletConnected(hash, 'hashpack');
-        }
-      } catch (e) {
-        // silent
-      }
-    })();
-  }, []);
+    if (!authLoading && !isAuthenticated) {
+      navigate('/auth');
+    }
+  }, [authLoading, isAuthenticated, navigate]);
 
   const handleConnect = async () => {
     try {
@@ -81,7 +74,6 @@ const Index = () => {
 
   const handleEntryAdded = async (entry: any) => {
     await addEntry({
-      wallet_address: walletAddress || '',
       date: entry.date || new Date().toISOString().split('T')[0],
       libelle: entry.libelle || entry.description || 'Écriture comptable',
       debit: entry.debit || '',
@@ -90,21 +82,20 @@ const Index = () => {
       devise: entry.devise || 'HBAR',
       tx_hash: entry.txHash || '',
       description: entry.description,
-      category: entry.category
+      category: entry.category,
     });
     toast({ title: 'Écriture enregistrée', description: 'Sauvegardée dans le Cloud' });
   };
 
   const handlePaymentAdded = async (payment: any) => {
     await addPayment({
-      wallet_address: walletAddress || '',
       type: payment.type || 'paiement',
       destinataire: payment.destinataire || '',
       montant: parseFloat(payment.montant) || 0,
       devise: payment.devise || 'HBAR',
       objet: payment.objet || '',
       tx_hash: payment.txHash || '',
-      status: 'confirmed'
+      status: 'confirmed',
     });
     toast({ title: 'Transaction enregistrée', description: 'Sauvegardée dans le Cloud' });
   };
@@ -148,6 +139,38 @@ const Index = () => {
       });
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 pb-16">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 pb-16 px-4">
+        <Card className="w-full max-w-md card-modern">
+          <CardHeader className="text-center p-6">
+            <CardTitle className="text-2xl text-gradient">Connexion requise</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-center p-6">
+            <p className="text-sm text-muted-foreground">
+              Connectez-vous avec votre email et mot de passe pour accéder à la plateforme.
+            </p>
+            <Button className="w-full bg-gradient-primary hover:opacity-90 h-12" onClick={() => navigate('/auth')}>
+              <LogIn className="h-5 w-5 mr-2" />
+              Aller à la connexion
+            </Button>
+            <div className="flex justify-center">
+              <ThemeToggle />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!isConnected) {
     return (
@@ -218,11 +241,21 @@ const Index = () => {
       />
       
       <div className="container mx-auto px-3 md:px-4 py-4 md:py-8 space-y-4 md:space-y-8">
+        {/* Status Banner */}
+        <StatusBanner
+          isAuthenticated={isAuthenticated}
+          isOnline={isOnline}
+          walletConnected={isConnected}
+          walletType={walletType}
+          pendingSync={pendingSync}
+          onSyncClick={syncOfflineQueue}
+        />
+
         {/* Cloud Status & Dashboard Overview */}
         <div className="flex items-center justify-between mb-2">
-          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">
+          <Badge variant="outline" className={`text-xs ${isOnline ? 'bg-primary/10 text-primary border-primary/20' : 'bg-warning/10 text-warning border-warning/20'}`}>
             <Cloud className="h-3 w-3 mr-1" />
-            Cloud Sync Active
+            {isOnline ? 'Cloud Sync Active' : 'Mode Hors-ligne'}
           </Badge>
           <Button 
             variant="ghost" 

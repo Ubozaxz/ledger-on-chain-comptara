@@ -5,9 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BookOpen, Hash } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { BookOpen, Hash, Link2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { getEthereum } from "@/lib/hedera";
 
 interface JournalEntryProps {
   onEntryAdded: (entry: any) => void;
@@ -23,8 +25,11 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
     compteDebit: "",
     compteCredit: "",
   });
+  const [anchorOnChain, setAnchorOnChain] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+
+  const hasWallet = !!getEthereum();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,37 +45,47 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
     setIsSubmitting(true);
 
     try {
-      const { anchorEntryData, getExplorerTxUrl } = await import("@/lib/hedera");
-      const payload = {
-        type: "journal_entry",
-        ...formData,
-        timestamp: new Date().toISOString(),
-      };
-      const txHash = await anchorEntryData(payload);
+      let txHash = "";
+
+      // Only anchor on-chain if user opted in AND wallet is available
+      if (anchorOnChain && hasWallet) {
+        const { anchorEntryData, getExplorerTxUrl } = await import("@/lib/hedera");
+        const payload = {
+          type: "journal_entry",
+          ...formData,
+          timestamp: new Date().toISOString(),
+        };
+        txHash = await anchorEntryData(payload);
+
+        toast({
+          title: "Ancré sur blockchain",
+          description: (
+            <div className="flex items-center space-x-2">
+              <Hash className="h-4 w-4" />
+              <a href={getExplorerTxUrl(txHash)} target="_blank" rel="noreferrer" className="font-mono text-xs text-primary hover:underline">
+                {txHash.slice(0, 16)}...
+              </a>
+            </div>
+          ),
+        });
+      }
 
       const entry = {
-        id: Date.now().toString(),
-        ...formData,
+        date: formData.date,
+        libelle: formData.libelle,
+        montant: formData.montant,
+        devise: formData.devise,
+        debit: formData.compteDebit,
+        credit: formData.compteCredit,
         txHash,
-        timestamp: payload.timestamp,
-        status: "success",
+        description: formData.libelle,
       };
 
       onEntryAdded(entry);
 
       toast({
-        title: "Écriture enregistrée avec succès",
-        description: (
-          <div className="space-y-2">
-            <p>Montant: {formData.montant} {formData.devise}</p>
-            <div className="flex items-center space-x-2">
-              <Hash className="h-4 w-4" />
-              <a href={getExplorerTxUrl(txHash)} target="_blank" rel="noreferrer" className="font-mono text-xs text-primary hover:underline">
-                {txHash}
-              </a>
-            </div>
-          </div>
-        ),
+        title: "Écriture enregistrée",
+        description: `${formData.montant} ${formData.devise} - ${txHash ? 'Ancrée on-chain' : 'Sauvegardée en cloud'}`,
       });
 
       // Reset form
@@ -83,6 +98,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
         compteCredit: "",
       });
     } catch (err: any) {
+      console.error("JournalEntry error:", err);
       toast({
         title: "Échec de l'enregistrement",
         description: err?.message || "Une erreur est survenue",
@@ -176,12 +192,39 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
             </div>
           </div>
 
+          {/* Blockchain anchor toggle */}
+          <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <Link2 className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-sm font-medium">Ancrer sur blockchain</p>
+                <p className="text-xs text-muted-foreground">
+                  {hasWallet 
+                    ? "Signer avec votre wallet pour preuve immuable" 
+                    : "Connectez un wallet EVM pour activer"}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={anchorOnChain}
+              onCheckedChange={setAnchorOnChain}
+              disabled={!hasWallet}
+            />
+          </div>
+
           <Button 
             type="submit" 
             className="w-full bg-primary hover:bg-primary-hover"
             disabled={isSubmitting}
           >
-            {isSubmitting ? t('submitting') : t('submit')}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                {anchorOnChain ? "Signature en cours..." : "Enregistrement..."}
+              </>
+            ) : (
+              t('submit')
+            )}
           </Button>
         </form>
       </CardContent>
