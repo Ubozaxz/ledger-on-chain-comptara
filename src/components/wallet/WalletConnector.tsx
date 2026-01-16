@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Wallet, Shield, LogOut, Globe, Smartphone, Monitor, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
-import { WalletType, connectMetaMask, connectHashPack, connectTrustWallet, isWalletInstalled, formatAddress, isMobile, isTrustWalletAvailable, isInWalletBrowser } from '@/lib/wallets';
+import { Wallet, Shield, LogOut, Globe, Smartphone, Monitor } from 'lucide-react';
+import { WalletType, connectMetaMask, connectHashPack, isWalletInstalled, formatAddress } from '@/lib/wallets';
+import { connectTrustWallet, isTrustWalletInstalled, isMobile } from '@/lib/walletconnect';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-
 interface WalletConnectorProps {
   isConnected: boolean;
   walletAddress: string | null;
@@ -26,88 +26,49 @@ export const WalletConnector = ({
 }: WalletConnectorProps) => {
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
-  const [isConnecting, setIsConnecting] = useState<WalletType | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [showWalletDialog, setShowWalletDialog] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const isMobileDevice = isMobile();
-  const inWalletBrowser = isInWalletBrowser();
 
-  // Auto-detect wallet in in-app browser
-  useEffect(() => {
-    if (inWalletBrowser && !isConnected) {
-      // Small delay to let provider inject
-      setTimeout(async () => {
-        try {
-          // Try MetaMask-compatible provider first
-          const { getEthereum } = await import('@/lib/hedera');
-          const ethereum = getEthereum();
-          if (ethereum) {
-            const accounts = await ethereum.request({ method: 'eth_accounts' });
-            if (accounts && accounts.length > 0) {
-              onConnect(accounts[0], ethereum.isTrust ? 'trust' : 'metamask');
-            }
-          }
-        } catch {
-          // Silent - user will connect manually
-        }
-      }, 500);
-    }
-  }, [inWalletBrowser, isConnected, onConnect]);
-
-  const handleConnect = async (type: WalletType) => {
-    setIsConnecting(type);
-    setConnectionError(null);
-
+  const handleConnect = async (type: WalletType | 'trustwallet') => {
+    setIsConnecting(true);
     try {
       let address: string;
       
       if (type === 'metamask') {
         address = await connectMetaMask();
-      } else if (type === 'trust') {
-        address = await connectTrustWallet();
+      } else if (type === 'trustwallet') {
+        const result = await connectTrustWallet();
+        if (!result) {
+          throw new Error('Connexion Trust Wallet annulée');
+        }
+        address = result;
       } else {
         address = await connectHashPack();
       }
       
-      onConnect(address, type);
+      onConnect(address, type === 'trustwallet' ? 'metamask' : type);
       setShowWalletDialog(false);
       
       toast({
-        title: 'Wallet connecté',
-        description: `${type.toUpperCase()} connecté sur Hedera Testnet`,
+        title: t('entrySuccess'),
+        description: `${type === 'trustwallet' ? 'Trust Wallet' : t(type)} connecté - ${formatAddress(address)}`,
       });
     } catch (error) {
       console.error('Wallet connection error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
-      setConnectionError(errorMessage);
-      
       toast({
-        title: 'Échec de connexion',
+        title: t('connectionError'),
         description: errorMessage,
         variant: 'destructive',
       });
     } finally {
-      setIsConnecting(null);
+      setIsConnecting(false);
     }
   };
 
   const toggleLanguage = () => {
     const newLang = i18n.language === 'fr' ? 'en' : 'fr';
     i18n.changeLanguage(newLang);
-  };
-
-  const openInWallet = (walletType: 'metamask' | 'trust') => {
-    const currentUrl = window.location.href;
-    let deepLink = '';
-    
-    if (walletType === 'metamask') {
-      const hostPath = `${window.location.host}${window.location.pathname}`;
-      deepLink = `https://metamask.app.link/dapp/${hostPath}`;
-    } else {
-      deepLink = `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(currentUrl)}`;
-    }
-    
-    window.location.href = deepLink;
   };
 
   return (
@@ -176,150 +137,99 @@ export const WalletConnector = ({
               </DialogTrigger>
               <DialogContent className="w-[95vw] max-w-md mx-auto">
                 <DialogHeader>
-                  <DialogTitle className="text-center text-lg md:text-xl flex items-center justify-center space-x-2">
-                    <Wallet className="h-5 w-5 text-primary" />
-                    <span>Connecter un wallet</span>
-                  </DialogTitle>
+                  <DialogTitle className="text-center text-lg md:text-xl">{t('connectWallet')}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-4">
-                  {/* Connection Error */}
-                  {connectionError && (
-                    <div className="flex items-start space-x-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                      <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-destructive">{connectionError}</p>
+                  {/* Trust Wallet - Mobile & Extension */}
+                  <Button
+                    className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:opacity-90 touch-manipulation"
+                    onClick={() => handleConnect('trustwallet')}
+                    disabled={isConnecting}
+                  >
+                    <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
+                      <img 
+                        src="https://trustwallet.com/assets/images/media/assets/trust_platform.svg" 
+                        alt="Trust Wallet"
+                        className="h-6 w-6"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjMzM3NUJCIi8+PHRleHQgeD0iMTYiIHk9IjIwIiBmb250LXNpemU9IjE0IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiPuKImzwvdGV4dD48L3N2Zz4=';
+                        }}
+                      />
                     </div>
-                  )}
+                    <div className="text-left flex-1 min-w-0">
+                      <div className="font-semibold text-white text-sm md:text-base">Trust Wallet</div>
+                      <div className="text-xs text-white/70 flex items-center space-x-1">
+                        {isMobile() ? (
+                          <>
+                            <Smartphone className="h-3 w-3" />
+                            <span>Mobile App</span>
+                          </>
+                        ) : (
+                          <>
+                            <Monitor className="h-3 w-3" />
+                            <span>Extension Web</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {isTrustWalletInstalled() && (
+                      <Badge variant="secondary" className="bg-white/20 text-white text-[10px]">
+                        Installé
+                      </Badge>
+                    )}
+                  </Button>
 
                   {/* MetaMask */}
-                  <div className="space-y-2">
-                    <Button
-                      variant="outline"
-                      className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
-                      onClick={() => handleConnect('metamask')}
-                      disabled={isConnecting !== null}
-                    >
-                      {isConnecting === 'metamask' ? (
-                        <Loader2 className="h-8 w-8 animate-spin" />
-                      ) : (
-                        <span className="text-2xl">🦊</span>
-                      )}
-                      <div className="text-left flex-1 min-w-0">
-                        <div className="font-semibold text-sm md:text-base">MetaMask</div>
-                        <div className="text-xs text-muted-foreground flex items-center space-x-1">
-                          {isMobileDevice ? (
-                            <>
-                              <Smartphone className="h-3 w-3" />
-                              <span>{inWalletBrowser ? 'Connecter' : 'Ouvrir dans MetaMask'}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Monitor className="h-3 w-3" />
-                              <span>Extension navigateur</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      {isWalletInstalled('metamask') && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Détecté
-                        </Badge>
-                      )}
-                    </Button>
-                    {isMobileDevice && !isWalletInstalled('metamask') && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full text-xs text-muted-foreground"
-                        onClick={() => openInWallet('metamask')}
-                      >
-                        <ExternalLink className="h-3 w-3 mr-1" />
-                        Ouvrir dans l'app MetaMask
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Trust Wallet */}
-                  <div className="space-y-2">
-                    <Button
-                      variant="outline"
-                      className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
-                      onClick={() => handleConnect('trust')}
-                      disabled={isConnecting !== null}
-                    >
-                      {isConnecting === 'trust' ? (
-                        <Loader2 className="h-8 w-8 animate-spin" />
-                      ) : (
-                        <span className="text-2xl">🔵</span>
-                      )}
-                      <div className="text-left flex-1 min-w-0">
-                        <div className="font-semibold text-sm md:text-base">Trust Wallet</div>
-                        <div className="text-xs text-muted-foreground flex items-center space-x-1">
-                          {isMobileDevice ? (
-                            <>
-                              <Smartphone className="h-3 w-3" />
-                              <span>{inWalletBrowser ? 'Connecter' : 'Ouvrir dans Trust'}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Monitor className="h-3 w-3" />
-                              <span>Extension navigateur</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      {isTrustWalletAvailable() && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Détecté
-                        </Badge>
-                      )}
-                    </Button>
-                    {isMobileDevice && !isTrustWalletAvailable() && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full text-xs text-muted-foreground"
-                        onClick={() => openInWallet('trust')}
-                      >
-                        <ExternalLink className="h-3 w-3 mr-1" />
-                        Ouvrir dans l'app Trust Wallet
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* HashPack */}
                   <Button
-                    variant="outline"
-                    className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 hover:bg-primary/10 touch-manipulation"
-                    onClick={() => handleConnect('hashpack')}
-                    disabled={isConnecting !== null}
+                    className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 bg-gradient-primary hover:opacity-90 touch-manipulation"
+                    onClick={() => handleConnect('metamask')}
+                    disabled={isConnecting || !isWalletInstalled('metamask')}
                   >
-                    {isConnecting === 'hashpack' ? (
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                    ) : (
-                      <span className="text-2xl">📦</span>
-                    )}
+                    <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
+                      <img 
+                        src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" 
+                        alt="MetaMask"
+                        className="h-6 w-6"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjRTI3NjI1Ii8+PHRleHQgeD0iMTYiIHk9IjIwIiBmb250LXNpemU9IjE0IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiPk08L3RleHQ+PC9zdmc+';
+                        }}
+                      />
+                    </div>
                     <div className="text-left flex-1 min-w-0">
-                      <div className="font-semibold text-sm md:text-base">HashPack</div>
-                      <div className="text-xs text-muted-foreground">Hedera Native Wallet</div>
+                      <div className="font-semibold text-white text-sm md:text-base">{t('metamask')}</div>
+                      <div className="text-xs text-white/70">Browser Extension</div>
                     </div>
                   </Button>
 
-                  {/* Mobile info */}
-                  {isMobileDevice && !inWalletBrowser && (
-                    <div className="flex items-start space-x-2 p-3 bg-muted/50 rounded-lg">
-                      <Smartphone className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                      <div className="text-xs text-muted-foreground">
-                        <p className="font-medium">Sur mobile?</p>
-                        <p>Ouvrez ce site dans le navigateur intégré de votre wallet (MetaMask ou Trust Wallet) pour une connexion directe.</p>
-                      </div>
+                  {/* HashPack */}
+                  <Button
+                    className="w-full h-14 md:h-16 flex items-center justify-start space-x-3 md:space-x-4 bg-gradient-secondary hover:opacity-90 touch-manipulation"
+                    onClick={() => handleConnect('hashpack')}
+                    disabled={isConnecting}
+                  >
+                    <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
+                      <div className="h-6 w-6 bg-blue-600 rounded"></div>
                     </div>
-                  )}
+                    <div className="text-left flex-1 min-w-0">
+                      <div className="font-semibold text-white text-sm md:text-base">{t('hashpack')}</div>
+                      <div className="text-xs text-white/70">Hedera Native Wallet</div>
+                    </div>
+                  </Button>
 
-                  <div className="text-center pt-2">
-                    <p className="text-xs text-muted-foreground">
-                      Réseau: <span className="text-success font-medium">Hedera Testnet</span>
+                  {/* Wallet not installed warnings */}
+                  {!isWalletInstalled('metamask') && (
+                    <p className="text-xs text-muted-foreground text-center px-2">
+                      MetaMask non détecté.{' '}
+                      <a
+                        href="https://metamask.io/download/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        Installer
+                      </a>
                     </p>
-                  </div>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>
