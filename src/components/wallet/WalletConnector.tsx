@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Wallet, Shield, LogOut, Globe, Smartphone, Monitor, Loader2, Copy, ExternalLink, Check } from 'lucide-react';
+import { Wallet, Shield, LogOut, Globe, Smartphone, Monitor, Loader2 } from 'lucide-react';
 import { WalletType, connectMetaMask, connectHashPack, connectTrustWallet, isWalletInstalled, formatAddress, isMobile, isTrustWalletAvailable } from '@/lib/wallets';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -28,8 +28,21 @@ export const WalletConnector = ({
   const { toast } = useToast();
   const [isConnecting, setIsConnecting] = useState<WalletType | null>(null);
   const [showWalletDialog, setShowWalletDialog] = useState(false);
-  const [copied, setCopied] = useState(false);
   const isMobileDevice = isMobile();
+
+  useEffect(() => {
+    const pending = localStorage.getItem('comptara_pending_wallet') as WalletType | null;
+    if (!pending) return;
+
+    localStorage.removeItem('comptara_pending_wallet');
+    setShowWalletDialog(true);
+
+    // give time for the in-app browser to inject the provider
+    setTimeout(() => {
+      handleConnect(pending);
+    }, 400);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleConnect = async (type: WalletType) => {
     setIsConnecting(type);
@@ -68,36 +81,9 @@ export const WalletConnector = ({
     }
   };
 
-  const handleCopyAddress = () => {
-    if (walletAddress) {
-      navigator.clipboard.writeText(walletAddress);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      toast({
-        title: 'Adresse copiée',
-        description: 'Adresse copiée dans le presse-papier'
-      });
-    }
-  };
-
-  const handleViewExplorer = () => {
-    if (walletAddress) {
-      window.open(`https://hashscan.io/testnet/account/${walletAddress}`, '_blank');
-    }
-  };
-
   const toggleLanguage = () => {
     const newLang = i18n.language === 'fr' ? 'en' : 'fr';
     i18n.changeLanguage(newLang);
-  };
-
-  const getWalletIcon = (type: WalletType) => {
-    switch (type) {
-      case 'trust': return '🔵';
-      case 'metamask': return '🦊';
-      case 'hashpack': return '📦';
-      default: return '💳';
-    }
   };
 
   return (

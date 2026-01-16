@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export interface AccountingEntry {
   id: string;
+  user_id?: string | null;
   wallet_address: string;
   date: string;
   libelle: string;
@@ -20,6 +21,7 @@ export interface AccountingEntry {
 
 export interface Payment {
   id: string;
+  user_id?: string | null;
   wallet_address: string;
   type: 'paiement' | 'encaissement';
   destinataire: string;
@@ -31,7 +33,7 @@ export interface Payment {
   created_at: string;
 }
 
-export function useCloudData(walletAddress: string | null) {
+export function useCloudData(walletAddress: string | null, userId: string | null) {
   const [entries, setEntries] = useState<AccountingEntry[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +41,7 @@ export function useCloudData(walletAddress: string | null) {
 
   // Fetch data from cloud
   const fetchData = useCallback(async () => {
-    if (!walletAddress) return;
+    if (!walletAddress || !userId) return;
     
     setIsLoading(true);
     try {
@@ -47,11 +49,13 @@ export function useCloudData(walletAddress: string | null) {
         supabase
           .from('accounting_entries')
           .select('*')
+          .eq('user_id', userId)
           .eq('wallet_address', walletAddress)
           .order('created_at', { ascending: false }),
         supabase
           .from('payments')
           .select('*')
+          .eq('user_id', userId)
           .eq('wallet_address', walletAddress)
           .order('created_at', { ascending: false })
       ]);
@@ -64,25 +68,27 @@ export function useCloudData(walletAddress: string | null) {
     } catch (error) {
       console.error('Error fetching cloud data:', error);
       // Fallback to localStorage
-      const storedEntries = localStorage.getItem(`comptara_entries_${walletAddress}`);
-      const storedPayments = localStorage.getItem(`comptara_payments_${walletAddress}`);
+      const storageKeySuffix = `${userId}_${walletAddress}`;
+      const storedEntries = localStorage.getItem(`comptara_entries_${storageKeySuffix}`);
+      const storedPayments = localStorage.getItem(`comptara_payments_${storageKeySuffix}`);
       if (storedEntries) setEntries(JSON.parse(storedEntries));
       if (storedPayments) setPayments(JSON.parse(storedPayments));
     } finally {
       setIsLoading(false);
     }
-  }, [walletAddress]);
+  }, [walletAddress, userId]);
 
   // Add entry to cloud
-  const addEntry = useCallback(async (entry: Omit<AccountingEntry, 'id' | 'created_at' | 'updated_at'>) => {
-    if (!walletAddress) return null;
+  const addEntry = useCallback(async (entry: Omit<AccountingEntry, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'wallet_address'>) => {
+    if (!walletAddress || !userId) return null;
 
     try {
       const { data, error } = await supabase
         .from('accounting_entries')
         .insert({
           ...entry,
-          wallet_address: walletAddress
+          user_id: userId,
+          wallet_address: walletAddress,
         })
         .select()
         .single();
@@ -90,33 +96,35 @@ export function useCloudData(walletAddress: string | null) {
       if (error) throw error;
 
       setEntries(prev => [data, ...prev]);
-      
+
       // Also save to localStorage as backup
+      const storageKeySuffix = `${userId}_${walletAddress}`;
       const updatedEntries = [data, ...entries];
-      localStorage.setItem(`comptara_entries_${walletAddress}`, JSON.stringify(updatedEntries));
-      
+      localStorage.setItem(`comptara_entries_${storageKeySuffix}`, JSON.stringify(updatedEntries));
+
       return data;
     } catch (error) {
       console.error('Error adding entry:', error);
       toast({
         title: 'Erreur',
-        description: 'Impossible de sauvegarder l\'écriture',
+        description: 'Impossible de sauvegarder l\'écriture (connexion requise)',
         variant: 'destructive'
       });
       return null;
     }
-  }, [walletAddress, entries, toast]);
+  }, [walletAddress, userId, entries, toast]);
 
   // Add payment to cloud
-  const addPayment = useCallback(async (payment: Omit<Payment, 'id' | 'created_at'>) => {
-    if (!walletAddress) return null;
+  const addPayment = useCallback(async (payment: Omit<Payment, 'id' | 'created_at' | 'user_id' | 'wallet_address'>) => {
+    if (!walletAddress || !userId) return null;
 
     try {
       const { data, error } = await supabase
         .from('payments')
         .insert({
           ...payment,
-          wallet_address: walletAddress
+          user_id: userId,
+          wallet_address: walletAddress,
         })
         .select()
         .single();
@@ -125,32 +133,33 @@ export function useCloudData(walletAddress: string | null) {
 
       const typedData = data as Payment;
       setPayments(prev => [typedData, ...prev]);
-      
+
       // Also save to localStorage as backup
+      const storageKeySuffix = `${userId}_${walletAddress}`;
       const updatedPayments = [typedData, ...payments];
-      localStorage.setItem(`comptara_payments_${walletAddress}`, JSON.stringify(updatedPayments));
-      
+      localStorage.setItem(`comptara_payments_${storageKeySuffix}`, JSON.stringify(updatedPayments));
+
       return data;
     } catch (error) {
       console.error('Error adding payment:', error);
       toast({
         title: 'Erreur',
-        description: 'Impossible de sauvegarder le paiement',
+        description: 'Impossible de sauvegarder le paiement (connexion requise)',
         variant: 'destructive'
       });
       return null;
     }
-  }, [walletAddress, payments, toast]);
+  }, [walletAddress, userId, payments, toast]);
 
   // Load data when wallet connects
   useEffect(() => {
-    if (walletAddress) {
+    if (walletAddress && userId) {
       fetchData();
     } else {
       setEntries([]);
       setPayments([]);
     }
-  }, [walletAddress, fetchData]);
+  }, [walletAddress, userId, fetchData]);
 
   return {
     entries,
