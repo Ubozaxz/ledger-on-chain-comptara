@@ -61,11 +61,12 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
         },
       };
 
-      const { buildJsonHeaders } = await import('@/lib/auth-headers');
-
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-accountant`, {
         method: "POST",
-        headers: await buildJsonHeaders(),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
         body: JSON.stringify({
           action: "audit",
           ledgerData,
@@ -73,7 +74,8 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to run audit");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to run audit");
       }
 
       // Parse streaming response

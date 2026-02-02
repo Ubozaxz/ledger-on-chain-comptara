@@ -40,11 +40,12 @@ export const AIChat = ({ ledgerData }: AIChatProps) => {
     setIsLoading(true);
 
     try {
-      const { buildJsonHeaders } = await import('@/lib/auth-headers');
-
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-accountant`, {
         method: "POST",
-        headers: await buildJsonHeaders(),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
         body: JSON.stringify({
           action: "chat",
           prompt: userMessage,

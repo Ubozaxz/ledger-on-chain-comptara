@@ -1,24 +1,34 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mic, MicOff, Loader2, CheckCircle, AlertCircle, Square } from "lucide-react";
+import { Mic, MicOff, Loader2, CheckCircle, AlertCircle, Square, BookOpen, CreditCard, Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-interface VoiceToEntryProps {
-  onEntryExtracted: (entry: any) => void;
+interface ExtractedEntry {
+  montant?: number;
+  devise?: string;
+  categorie?: string;
+  tiers?: string;
+  description?: string;
+  type?: "debit" | "credit";
+  txHash?: string;
+  raw?: string;
 }
 
-// Check if browser supports MediaRecorder (more universal than SpeechRecognition)
-const hasMediaRecorder = typeof MediaRecorder !== "undefined";
-const hasSpeechRecognition =
-  typeof window !== "undefined" &&
-  ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+interface VoiceToEntryProps {
+  onEntryExtracted: (entry: ExtractedEntry) => void;
+  onInsertToJournal?: (entry: ExtractedEntry) => void;
+  onInsertToPayment?: (entry: ExtractedEntry) => void;
+}
 
-export const VoiceToEntry = ({ onEntryExtracted }: VoiceToEntryProps) => {
+// Check if browser supports MediaRecorder
+const hasMediaRecorder = typeof MediaRecorder !== "undefined";
+
+export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPayment }: VoiceToEntryProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [lastResult, setLastResult] = useState<any>(null);
+  const [lastResult, setLastResult] = useState<ExtractedEntry | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const { toast } = useToast();
@@ -26,7 +36,18 @@ export const VoiceToEntry = ({ onEntryExtracted }: VoiceToEntryProps) => {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      
+      // Use supported mime type
+      let mimeType = "audio/webm";
+      if (!MediaRecorder.isTypeSupported("audio/webm")) {
+        if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          mimeType = "audio/mp4";
+        } else if (MediaRecorder.isTypeSupported("audio/ogg")) {
+          mimeType = "audio/ogg";
+        }
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -38,7 +59,7 @@ export const VoiceToEntry = ({ onEntryExtracted }: VoiceToEntryProps) => {
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
-        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
         await processAudio(audioBlob);
       };
 
@@ -77,14 +98,15 @@ export const VoiceToEntry = ({ onEntryExtracted }: VoiceToEntryProps) => {
       reader.readAsDataURL(audioBlob);
       const base64Audio = await base64Promise;
 
-      const { buildJsonHeaders } = await import("@/lib/auth-headers");
-
       // Call edge function for transcription + extraction
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-transcribe`,
         {
           method: "POST",
-          headers: await buildJsonHeaders(),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
           body: JSON.stringify({ audio: base64Audio }),
         }
       );
@@ -98,15 +120,27 @@ export const VoiceToEntry = ({ onEntryExtracted }: VoiceToEntryProps) => {
       setTranscript(data.transcription || "");
 
       if (data.entry) {
-        setLastResult(data.entry);
-        onEntryExtracted(data.entry);
+        const entry: ExtractedEntry = {
+          montant: data.entry.montant,
+          devise: data.entry.devise || "HBAR",
+          categorie: data.entry.categorie,
+          tiers: data.entry.tiers,
+          description: data.entry.description,
+          type: data.entry.type,
+          txHash: data.entry.txHash,
+        };
+        setLastResult(entry);
+        onEntryExtracted(entry);
         toast({
-          title: "Écriture extraite",
-          description: `${data.entry.description || "Nouvelle écriture"} - ${data.entry.montant} ${data.entry.devise || "HBAR"}`,
+          title: "Données extraites",
+          description: `${entry.description || "Nouvelle écriture"} - ${entry.montant} ${entry.devise}`,
         });
       } else {
         setLastResult({ raw: data.transcription });
-        toast({ title: "Transcription terminée", description: data.transcription?.slice(0, 60) || "Aucun texte détecté" });
+        toast({ 
+          title: "Transcription terminée", 
+          description: data.transcription?.slice(0, 60) || "Aucun texte détecté" 
+        });
       }
     } catch (error: any) {
       console.error("Voice processing error:", error);
@@ -128,6 +162,27 @@ export const VoiceToEntry = ({ onEntryExtracted }: VoiceToEntryProps) => {
     }
   };
 
+  const handleInsertToJournal = () => {
+    if (lastResult && onInsertToJournal) {
+      onInsertToJournal(lastResult);
+      toast({ title: "Inséré dans Journal", description: "Les données ont été ajoutées au formulaire" });
+    }
+  };
+
+  const handleInsertToPayment = () => {
+    if (lastResult && onInsertToPayment) {
+      onInsertToPayment(lastResult);
+      toast({ title: "Inséré dans Paiement", description: "Les données ont été ajoutées au formulaire" });
+    }
+  };
+
+  const copyToClipboard = () => {
+    if (transcript) {
+      navigator.clipboard.writeText(transcript);
+      toast({ title: "Copié", description: "Transcription copiée dans le presse-papier" });
+    }
+  };
+
   return (
     <Card className="card-modern">
       <CardHeader>
@@ -138,7 +193,7 @@ export const VoiceToEntry = ({ onEntryExtracted }: VoiceToEntryProps) => {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Dictez votre écriture comptable et l'IA l'analysera automatiquement.
+          Dictez votre écriture comptable ou paiement. L'IA analysera et extraira les données automatiquement.
         </p>
 
         {!hasMediaRecorder && (
@@ -179,20 +234,87 @@ export const VoiceToEntry = ({ onEntryExtracted }: VoiceToEntryProps) => {
 
         {transcript && (
           <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Transcription</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Transcription</p>
+              <Button variant="ghost" size="sm" onClick={copyToClipboard} className="h-7 px-2">
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
             <p className="text-sm">{transcript}</p>
           </div>
         )}
 
-        {lastResult && (
-          <div className="bg-success/10 border border-success/20 rounded-lg p-4 space-y-2">
+        {lastResult && lastResult.montant && (
+          <div className="bg-success/10 border border-success/20 rounded-lg p-4 space-y-3">
             <div className="flex items-center space-x-2">
               <CheckCircle className="h-4 w-4 text-success" />
               <p className="text-xs text-success uppercase tracking-wider">Données extraites</p>
             </div>
-            <pre className="text-xs overflow-auto max-h-40">
-              {JSON.stringify(lastResult, null, 2)}
-            </pre>
+            
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {lastResult.montant && (
+                <div>
+                  <span className="text-muted-foreground">Montant:</span>{" "}
+                  <span className="font-medium">{lastResult.montant} {lastResult.devise}</span>
+                </div>
+              )}
+              {lastResult.categorie && (
+                <div>
+                  <span className="text-muted-foreground">Catégorie:</span>{" "}
+                  <span className="font-medium">{lastResult.categorie}</span>
+                </div>
+              )}
+              {lastResult.tiers && (
+                <div>
+                  <span className="text-muted-foreground">Tiers:</span>{" "}
+                  <span className="font-medium">{lastResult.tiers}</span>
+                </div>
+              )}
+              {lastResult.type && (
+                <div>
+                  <span className="text-muted-foreground">Type:</span>{" "}
+                  <span className="font-medium">{lastResult.type}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              {onInsertToJournal && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleInsertToJournal}
+                  className="flex-1 border-primary/30 hover:bg-primary/10"
+                >
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Insérer en écriture
+                </Button>
+              )}
+              {onInsertToPayment && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleInsertToPayment}
+                  className="flex-1 border-primary/30 hover:bg-primary/10"
+                >
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Insérer en paiement
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {lastResult && !lastResult.montant && lastResult.raw && (
+          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="h-4 w-4 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">Aucune donnée comptable détectée</p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Essayez de dicter plus clairement avec le montant, la devise et la description.
+            </p>
           </div>
         )}
       </CardContent>

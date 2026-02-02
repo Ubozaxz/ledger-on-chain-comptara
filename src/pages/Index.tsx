@@ -356,22 +356,58 @@ const Index = () => {
           
           <TabsContent value="ai" className="space-y-4 md:space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              <VoiceToEntry onEntryExtracted={(entry) => {
-                if (entry.montant) {
+              <VoiceToEntry 
+                onEntryExtracted={(entry) => {
+                  // Auto-save if montant is present
+                  if (entry.montant) {
+                    handleEntryAdded({
+                      date: new Date().toISOString().split('T')[0],
+                      libelle: entry.description || 'Écriture vocale',
+                      debit: entry.type === 'debit' ? entry.categorie || 'Divers' : '',
+                      credit: entry.type === 'credit' ? entry.categorie || 'Divers' : '',
+                      montant: entry.montant,
+                      devise: entry.devise || 'HBAR',
+                      txHash: entry.txHash || '',
+                      description: entry.description,
+                    });
+                  }
+                }}
+                onInsertToJournal={(entry) => {
+                  // Navigate to journal tab and show pre-filled data
+                  toast({
+                    title: "Données prêtes",
+                    description: `${entry.montant} ${entry.devise || 'HBAR'} - Allez dans l'onglet Journal pour compléter`,
+                  });
                   handleEntryAdded({
                     date: new Date().toISOString().split('T')[0],
-                    libelle: entry.description || 'Écriture vocale',
+                    libelle: entry.description || entry.categorie || 'Écriture vocale',
                     debit: entry.type === 'debit' ? entry.categorie || 'Divers' : '',
                     credit: entry.type === 'credit' ? entry.categorie || 'Divers' : '',
-                    montant: entry.montant,
+                    montant: entry.montant || 0,
                     devise: entry.devise || 'HBAR',
                     txHash: entry.txHash || '',
                     description: entry.description,
                   });
-                }
-              }} />
+                }}
+                onInsertToPayment={(entry) => {
+                  // Save as payment
+                  toast({
+                    title: "Données prêtes",
+                    description: `${entry.montant} ${entry.devise || 'HBAR'} - Paiement enregistré`,
+                  });
+                  handlePaymentAdded({
+                    type: entry.type === 'credit' ? 'encaissement' : 'paiement',
+                    destinataire: entry.tiers || 'Non spécifié',
+                    montant: entry.montant || 0,
+                    devise: entry.devise || 'HBAR',
+                    objet: entry.description || entry.categorie || 'Opération vocale',
+                    txHash: entry.txHash || '',
+                  });
+                }}
+              />
               <FileAnalyzer />
             </div>
+            <AIChat ledgerData={{ entries, payments }} />
           </TabsContent>
           
           <TabsContent value="journal" className="space-y-4 md:space-y-6">
