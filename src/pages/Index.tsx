@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { WalletConnector } from "@/components/wallet/WalletConnector";
 import { WalletType } from "@/lib/wallets";
@@ -11,6 +11,7 @@ import { VoiceToEntry } from "@/components/ai/VoiceToEntry";
 import { AuditModule } from "@/components/ai/AuditModule";
 import { FileAnalyzer } from "@/components/ai/FileAnalyzer";
 import { AIChat } from "@/components/ai/AIChat";
+import { SmartSuggestions } from "@/components/ai/SmartSuggestions";
 import { StatusBanner } from "@/components/ui/status-banner";
 import { useCloudData } from "@/hooks/useCloudData";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,13 +19,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash, Bot, RefreshCw, Cloud, Loader2, LogIn } from "lucide-react";
+import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash, Bot, RefreshCw, Cloud, Loader2, LogIn, Shield } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, isAdmin } = useAuth();
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -253,10 +255,23 @@ const Index = () => {
 
         {/* Cloud Status & Dashboard Overview */}
         <div className="flex items-center justify-between mb-2">
-          <Badge variant="outline" className={`text-xs ${isOnline ? 'bg-primary/10 text-primary border-primary/20' : 'bg-warning/10 text-warning border-warning/20'}`}>
-            <Cloud className="h-3 w-3 mr-1" />
-            {isOnline ? 'Cloud Sync Active' : 'Mode Hors-ligne'}
-          </Badge>
+          <div className="flex items-center space-x-2">
+            <Badge variant="outline" className={`text-xs ${isOnline ? 'bg-primary/10 text-primary border-primary/20' : 'bg-warning/10 text-warning border-warning/20'}`}>
+              <Cloud className="h-3 w-3 mr-1" />
+              {isOnline ? 'Cloud Sync Active' : 'Mode Hors-ligne'}
+            </Badge>
+            {isAdmin && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => navigate('/admin')}
+                className="h-7 px-2 text-xs bg-primary/10 border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground"
+              >
+                <Shield className="h-3 w-3 mr-1" />
+                Admin
+              </Button>
+            )}
+          </div>
           <Button 
             variant="ghost" 
             size="sm" 
@@ -269,6 +284,26 @@ const Index = () => {
         </div>
 
         <DashboardStats entries={entries} payments={payments} />
+        
+        {/* Smart Suggestions */}
+        <SmartSuggestions 
+          entries={entries} 
+          payments={payments}
+          onSuggestionClick={(action) => {
+            if (action === "navigate-journal" && tabsRef.current) {
+              const journalTab = tabsRef.current.querySelector('[value="journal"]') as HTMLButtonElement;
+              journalTab?.click();
+            } else if (action === "navigate-ai" && tabsRef.current) {
+              const aiTab = tabsRef.current.querySelector('[value="ai"]') as HTMLButtonElement;
+              aiTab?.click();
+            } else if (action === "export") {
+              handleExportData();
+            } else if (action === "run-audit" && tabsRef.current) {
+              const dashboardTab = tabsRef.current.querySelector('[value="dashboard"]') as HTMLButtonElement;
+              dashboardTab?.click();
+            }
+          }}
+        />
 
         {/* Quick Actions - Mobile Optimized */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-6">
@@ -325,7 +360,7 @@ const Index = () => {
 
         {/* Main Content - Mobile First Tabs */}
         <Tabs defaultValue="dashboard" className="space-y-4 md:space-y-8">
-          <TabsList className="grid w-full grid-cols-5 bg-card border h-auto p-1">
+          <TabsList ref={tabsRef} className="grid w-full grid-cols-5 bg-card border h-auto p-1">
             <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
               <BarChart3 className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline text-xs">Dashboard</span>
