@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { 
   Users, FileText, CreditCard, BarChart3, RefreshCw, 
-  LogOut, Shield, TrendingUp, ArrowLeft, Loader2 
+  LogOut, Shield, TrendingUp, ArrowLeft, Loader2,
+  Activity, PieChart, Calendar, Hash, Wallet, Database,
+  CheckCircle, AlertTriangle, Clock, Globe
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -19,6 +22,10 @@ interface AdminStats {
   totalEntries: number;
   totalPayments: number;
   totalVolume: number;
+  activeUsers: number;
+  todayTransactions: number;
+  verifiedTransactions: number;
+  avgTransactionValue: number;
 }
 
 interface UserData {
@@ -26,6 +33,7 @@ interface UserData {
   email: string;
   role: string;
   created_at: string;
+  display_name: string | null;
 }
 
 interface EntryData {
@@ -35,6 +43,9 @@ interface EntryData {
   devise: string;
   wallet_address: string;
   created_at: string;
+  tx_hash: string | null;
+  user_id: string | null;
+  category: string | null;
 }
 
 interface PaymentData {
@@ -45,11 +56,16 @@ interface PaymentData {
   type: string;
   wallet_address: string;
   created_at: string;
+  tx_hash: string;
+  status: string | null;
 }
 
 export default function Admin() {
   const { user, profile, isAdmin, isLoading: authLoading, signOut } = useAuth();
-  const [stats, setStats] = useState<AdminStats>({ totalUsers: 0, totalEntries: 0, totalPayments: 0, totalVolume: 0 });
+  const [stats, setStats] = useState<AdminStats>({
+    totalUsers: 0, totalEntries: 0, totalPayments: 0, totalVolume: 0,
+    activeUsers: 0, todayTransactions: 0, verifiedTransactions: 0, avgTransactionValue: 0
+  });
   const [users, setUsers] = useState<UserData[]>([]);
   const [entries, setEntries] = useState<EntryData[]>([]);
   const [payments, setPayments] = useState<PaymentData[]>([]);
@@ -91,7 +107,7 @@ export default function Admin() {
         .from('accounting_entries')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(200);
 
       if (entriesError) throw entriesError;
       setEntries(entriesData || []);
@@ -101,20 +117,41 @@ export default function Admin() {
         .from('payments')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(200);
 
       if (paymentsError) throw paymentsError;
       setPayments(paymentsData || []);
 
-      // Calculate stats
+      // Calculate comprehensive stats
       const entriesVolume = (entriesData || []).reduce((sum, e) => sum + (e.montant || 0), 0);
       const paymentsVolume = (paymentsData || []).reduce((sum, p) => sum + (p.montant || 0), 0);
+      const totalVolume = entriesVolume + paymentsVolume;
+      const totalTransactions = (entriesData?.length || 0) + (paymentsData?.length || 0);
+
+      // Today's transactions
+      const today = new Date().toISOString().split('T')[0];
+      const todayEntries = (entriesData || []).filter(e => e.created_at.startsWith(today)).length;
+      const todayPayments = (paymentsData || []).filter(p => p.created_at.startsWith(today)).length;
+
+      // Verified transactions (with tx_hash)
+      const verifiedEntries = (entriesData || []).filter(e => e.tx_hash && e.tx_hash.length > 10).length;
+      const verifiedPayments = (paymentsData || []).filter(p => p.tx_hash && p.tx_hash.length > 10).length;
+
+      // Active users (with at least one transaction)
+      const activeUserIds = new Set([
+        ...(entriesData || []).filter(e => e.user_id).map(e => e.user_id),
+        ...(paymentsData || []).filter(p => p.user_id).map(p => p.user_id)
+      ]);
 
       setStats({
         totalUsers: (profilesData || []).length,
         totalEntries: (entriesData || []).length,
         totalPayments: (paymentsData || []).length,
-        totalVolume: entriesVolume + paymentsVolume
+        totalVolume,
+        activeUsers: activeUserIds.size,
+        todayTransactions: todayEntries + todayPayments,
+        verifiedTransactions: verifiedEntries + verifiedPayments,
+        avgTransactionValue: totalTransactions > 0 ? totalVolume / totalTransactions : 0
       });
 
     } catch (error) {
@@ -140,6 +177,12 @@ export default function Admin() {
     navigate('/auth');
   };
 
+  const getVerificationRate = () => {
+    const total = stats.totalEntries + stats.totalPayments;
+    if (total === 0) return 0;
+    return (stats.verifiedTransactions / total) * 100;
+  };
+
   if (authLoading || (!isAdmin && user)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
@@ -163,11 +206,11 @@ export default function Admin() {
             </Button>
             <div className="flex items-center space-x-2">
               <Shield className="h-6 w-6 text-primary" />
-              <h1 className="text-xl font-bold text-gradient">Admin Dashboard</h1>
+              <h1 className="text-xl font-bold text-gradient">Dashboard Admin</h1>
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <Badge variant="default" className="bg-primary/20 text-primary">
+            <Badge variant="default" className="bg-primary/20 text-primary hidden sm:flex">
               {profile?.email}
             </Badge>
             <ThemeToggle />
@@ -179,7 +222,7 @@ export default function Admin() {
       </header>
 
       <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Stats Cards */}
+        {/* Overview Stats - Row 1 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card className="card-modern">
             <CardContent className="p-4">
@@ -187,6 +230,7 @@ export default function Admin() {
                 <div>
                   <p className="text-xs text-muted-foreground">Utilisateurs</p>
                   <p className="text-2xl font-bold">{stats.totalUsers}</p>
+                  <p className="text-xs text-success">{stats.activeUsers} actifs</p>
                 </div>
                 <Users className="h-8 w-8 text-primary" />
               </div>
@@ -199,6 +243,7 @@ export default function Admin() {
                 <div>
                   <p className="text-xs text-muted-foreground">Écritures</p>
                   <p className="text-2xl font-bold">{stats.totalEntries}</p>
+                  <p className="text-xs text-muted-foreground">comptables</p>
                 </div>
                 <FileText className="h-8 w-8 text-success" />
               </div>
@@ -211,6 +256,7 @@ export default function Admin() {
                 <div>
                   <p className="text-xs text-muted-foreground">Paiements</p>
                   <p className="text-2xl font-bold">{stats.totalPayments}</p>
+                  <p className="text-xs text-muted-foreground">confirmés</p>
                 </div>
                 <CreditCard className="h-8 w-8 text-warning" />
               </div>
@@ -221,8 +267,9 @@ export default function Admin() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">Volume</p>
+                  <p className="text-xs text-muted-foreground">Volume Total</p>
                   <p className="text-xl font-bold">{stats.totalVolume.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">HBAR</p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-primary" />
               </div>
@@ -230,8 +277,55 @@ export default function Admin() {
           </Card>
         </div>
 
+        {/* Secondary Stats - Row 2 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="card-modern bg-muted/30">
+            <CardContent className="p-4 flex items-center space-x-3">
+              <Clock className="h-6 w-6 text-primary" />
+              <div>
+                <p className="text-lg font-bold">{stats.todayTransactions}</p>
+                <p className="text-xs text-muted-foreground">Aujourd'hui</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="card-modern bg-muted/30">
+            <CardContent className="p-4 flex items-center space-x-3">
+              <Hash className="h-6 w-6 text-success" />
+              <div>
+                <p className="text-lg font-bold">{stats.verifiedTransactions}</p>
+                <p className="text-xs text-muted-foreground">On-chain</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="card-modern bg-muted/30">
+            <CardContent className="p-4 flex items-center space-x-3">
+              <Activity className="h-6 w-6 text-warning" />
+              <div>
+                <p className="text-lg font-bold">{stats.avgTransactionValue.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Moy. HBAR</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="card-modern bg-muted/30">
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Vérification</span>
+                <span className="text-xs font-medium">{getVerificationRate().toFixed(0)}%</span>
+              </div>
+              <Progress value={getVerificationRate()} className="h-2" />
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Refresh Button */}
-        <div className="flex justify-end">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <Globe className="h-4 w-4 text-success" />
+            <span className="text-xs text-muted-foreground">Hedera Testnet</span>
+          </div>
           <Button 
             variant="outline" 
             onClick={fetchAdminData}
@@ -247,39 +341,52 @@ export default function Admin() {
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="users">
               <Users className="h-4 w-4 mr-2" />
-              Utilisateurs
+              <span className="hidden sm:inline">Utilisateurs</span>
             </TabsTrigger>
             <TabsTrigger value="entries">
               <FileText className="h-4 w-4 mr-2" />
-              Écritures
+              <span className="hidden sm:inline">Écritures</span>
             </TabsTrigger>
             <TabsTrigger value="payments">
               <CreditCard className="h-4 w-4 mr-2" />
-              Paiements
+              <span className="hidden sm:inline">Paiements</span>
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users">
             <Card className="card-modern">
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Users className="h-5 w-5 text-primary" />
-                  <span>Tous les utilisateurs ({users.length})</span>
+                <CardTitle className="flex items-center justify-between text-base">
+                  <div className="flex items-center space-x-2">
+                    <Users className="h-5 w-5 text-primary" />
+                    <span>Tous les utilisateurs ({users.length})</span>
+                  </div>
+                  <Badge variant="outline">{stats.activeUsers} actifs</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-2">
-                    {users.map((user) => (
-                      <div key={user.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                        <div>
-                          <p className="font-medium text-sm">{user.email}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(user.created_at).toLocaleDateString('fr-FR')}
-                          </p>
+                    {users.map((userData) => (
+                      <div key={userData.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center space-x-3">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="text-sm font-medium text-primary">
+                              {userData.email.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{userData.display_name || userData.email}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Inscrit le {new Date(userData.created_at).toLocaleDateString('fr-FR')}
+                            </p>
+                          </div>
                         </div>
-                        <Badge variant={user.role === 'admin' ? 'default' : 'outline'}>
-                          {user.role}
+                        <Badge 
+                          variant={userData.role === 'admin' ? 'default' : 'outline'}
+                          className={userData.role === 'admin' ? 'bg-primary/20 text-primary' : ''}
+                        >
+                          {userData.role}
                         </Badge>
                       </div>
                     ))}
@@ -297,23 +404,38 @@ export default function Admin() {
           <TabsContent value="entries">
             <Card className="card-modern">
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <FileText className="h-5 w-5 text-success" />
-                  <span>Dernières écritures ({entries.length})</span>
+                <CardTitle className="flex items-center justify-between text-base">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="h-5 w-5 text-success" />
+                    <span>Dernières écritures ({entries.length})</span>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-2">
                     {entries.map((entry) => (
-                      <div key={entry.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                      <div key={entry.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium text-sm truncate">{entry.libelle}</p>
-                          <p className="text-xs text-muted-foreground font-mono truncate">
-                            {entry.wallet_address?.slice(0, 12)}...
-                          </p>
+                          <div className="flex items-center space-x-2">
+                            <p className="font-medium text-sm truncate">{entry.libelle}</p>
+                            {entry.tx_hash && (
+                              <CheckCircle className="h-3 w-3 text-success flex-shrink-0" />
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Wallet className="h-3 w-3 text-muted-foreground" />
+                            <p className="text-xs text-muted-foreground font-mono truncate">
+                              {entry.wallet_address?.slice(0, 12)}...
+                            </p>
+                            {entry.category && (
+                              <Badge variant="outline" className="text-xs h-5">
+                                {entry.category}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right flex-shrink-0 ml-4">
                           <p className="font-semibold">{entry.montant} {entry.devise}</p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(entry.created_at).toLocaleDateString('fr-FR')}
@@ -335,20 +457,27 @@ export default function Admin() {
           <TabsContent value="payments">
             <Card className="card-modern">
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <CreditCard className="h-5 w-5 text-warning" />
-                  <span>Derniers paiements ({payments.length})</span>
+                <CardTitle className="flex items-center justify-between text-base">
+                  <div className="flex items-center space-x-2">
+                    <CreditCard className="h-5 w-5 text-warning" />
+                    <span>Derniers paiements ({payments.length})</span>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-2">
                     {payments.map((payment) => (
-                      <div key={payment.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                      <div key={payment.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium text-sm truncate">{payment.objet}</p>
                           <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs">
+                            <p className="font-medium text-sm truncate">{payment.objet || 'Paiement'}</p>
+                            {payment.tx_hash && (
+                              <CheckCircle className="h-3 w-3 text-success flex-shrink-0" />
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Badge variant="outline" className="text-xs h-5">
                               {payment.type}
                             </Badge>
                             <p className="text-xs text-muted-foreground font-mono truncate">
@@ -356,7 +485,7 @@ export default function Admin() {
                             </p>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right flex-shrink-0 ml-4">
                           <p className="font-semibold">{payment.montant} {payment.devise}</p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(payment.created_at).toLocaleDateString('fr-FR')}
