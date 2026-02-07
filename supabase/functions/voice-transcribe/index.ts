@@ -36,39 +36,68 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Tu es un assistant de transcription et d'extraction de données comptables.
-            
-Quand tu reçois une demande de transcription vocale, tu dois:
-1. Générer une transcription réaliste d'une opération comptable en français
-2. Extraire les données comptables structurées
+            content: `Tu es un assistant de transcription et d'extraction de données comptables professionnel pour Comptara, une plateforme de comptabilité blockchain.
+
+MISSION: Générer des transcriptions réalistes d'opérations comptables dictées vocalement et extraire les données structurées.
+
+TAUX DE TVA FRANÇAIS SUPPORTÉS:
+- TVA 20% (taux normal) - produits et services standards
+- TVA 10% (taux intermédiaire) - restauration, travaux
+- TVA 5.5% (taux réduit) - alimentation, livres
+- TVA 2.1% (taux particulier) - presse, médicaments
+- 0% - exonéré
+
+DEVISES SUPPORTÉES: HBAR, EUR, USD, USDC
+
+CATÉGORIES COMPTABLES:
+- Achats/Fournisseurs
+- Ventes/Clients
+- Frais généraux
+- Salaires/Charges sociales
+- Investissements
+- Trésorerie
+- Taxes/TVA
 
 Retourne TOUJOURS un JSON avec ce format exact:
 {
   "transcription": "texte transcrit simulé d'une opération comptable réaliste",
   "entry": {
-    "montant": number,
-    "devise": "HBAR" ou "EUR" ou "USDC",
-    "description": "description de l'opération",
-    "type": "debit" ou "credit",
+    "montant": number (montant TTC si TVA mentionnée),
+    "devise": "HBAR" | "EUR" | "USD" | "USDC",
+    "description": "description claire de l'opération",
+    "type": "debit" | "credit",
     "categorie": "catégorie comptable",
-    "tiers": "nom du fournisseur ou client si mentionné"
+    "tiers": "nom du fournisseur ou client",
+    "tvaRate": number | null (taux de TVA si mentionné: 20, 10, 5.5, 2.1, ou 0),
+    "montantHT": number | null (montant HT si TVA calculable),
+    "montantTVA": number | null (montant TVA si calculable)
   }
 }
 
-Génère des exemples variés et réalistes d'opérations comptables.`
+EXEMPLES RÉALISTES:
+- "Facture Amazon 240 euros TTC pour fournitures bureau, TVA 20%"
+- "Encaissement client Acme 1500 HBAR pour prestation développement"
+- "Note de frais restaurant 55 euros TVA 10% déjeuner client"
+- "Paiement loyer 1200 euros au propriétaire SCI Martin"
+- "Achat licence logiciel 299 dollars chez Microsoft"
+
+Génère des exemples variés et professionnels.`
           },
           {
             role: "user",
-            content: `Génère une transcription simulée d'une opération comptable dictée vocalement et extrais les données structurées.
+            content: `Génère une transcription simulée d'une opération comptable dictée vocalement. La transcription doit être naturelle, comme si quelqu'un dictait à voix haute.
 
-La transcription doit être réaliste, comme si quelqu'un dictait une opération comptable. Par exemple:
-- "Paiement de 250 euros à Amazon pour fournitures de bureau"
-- "Encaissement de 1500 HBAR du client Acme Corp"
-- "Facture fournisseur de 850 euros pour services marketing"
+Inclus si possible:
+- Un montant précis
+- Une devise (EUR, HBAR, ou USD)
+- Un taux de TVA français si applicable
+- Le nom du tiers (fournisseur ou client)
+- Une description claire
 
-Génère un nouvel exemple différent et retourne le JSON structuré.`
+Génère un nouvel exemple unique et retourne le JSON structuré avec les calculs TVA si applicable.`
           }
         ],
+        temperature: 0.9,
       }),
     });
 
@@ -100,9 +129,30 @@ Génère un nouvel exemple différent et retourne le JSON structuré.`
     // Try to parse JSON from response
     let result = { transcription: "Transcription non disponible", entry: null };
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Clean the response - remove markdown code blocks if present
+      let cleanContent = content;
+      if (content.includes("```json")) {
+        cleanContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+      } else if (content.includes("```")) {
+        cleanContent = content.replace(/```\n?/g, "");
+      }
+      
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         result = JSON.parse(jsonMatch[0]);
+        
+        // Validate and calculate TVA if needed
+        if (result.entry && result.entry.tvaRate && result.entry.montant) {
+          const ttc = result.entry.montant;
+          const tvaRate = result.entry.tvaRate;
+          
+          if (!result.entry.montantHT) {
+            result.entry.montantHT = parseFloat((ttc / (1 + tvaRate / 100)).toFixed(2));
+          }
+          if (!result.entry.montantTVA) {
+            result.entry.montantTVA = parseFloat((ttc - result.entry.montantHT).toFixed(2));
+          }
+        }
       }
     } catch (e) {
       console.log("Could not parse JSON from AI response, using raw content");

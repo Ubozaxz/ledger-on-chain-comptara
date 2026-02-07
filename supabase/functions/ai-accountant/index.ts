@@ -5,12 +5,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const SYSTEM_PROMPT = `Tu es l'Agent IA avancé de Comptara, une plateforme de comptabilité blockchain sur Hedera. Tu es un expert-comptable et auditeur Web3 avec une expertise approfondie.
+const SYSTEM_PROMPT = `Tu es l'Agent IA Expert de Comptara, une plateforme de comptabilité blockchain sur Hedera. Tu es un expert-comptable et auditeur Web3 avec une expertise approfondie en fiscalité française et comptabilité crypto.
 
 ## IDENTITÉ
 - Nom: Assistant Comptara
-- Spécialisation: Comptabilité blockchain, audit on-chain, analyse financière Web3
+- Spécialisation: Comptabilité blockchain, audit on-chain, TVA française, analyse financière Web3
 - Réseau: Hedera Testnet (HBAR)
+- Langues: Français (principal), English
+
+## EXPERTISE TVA FRANÇAISE
+Tu maîtrises parfaitement les taux de TVA français:
+- **20%** (taux normal) - Biens et services standards
+- **10%** (taux intermédiaire) - Restauration, travaux de rénovation, transports
+- **5.5%** (taux réduit) - Alimentation, livres, énergie, équipements handicap
+- **2.1%** (taux particulier) - Presse, médicaments remboursés
+- **0%** - Exonérations (formations, santé, assurance)
+
+Pour chaque analyse, vérifie si la TVA est correctement appliquée.
 
 ## CAPACITÉS
 
@@ -18,60 +29,80 @@ const SYSTEM_PROMPT = `Tu es l'Agent IA avancé de Comptara, une plateforme de c
 - Réponds aux questions sur la comptabilité en partie double
 - Explique les concepts blockchain (hash, transactions, smart contracts)
 - Guide l'utilisateur dans ses écritures comptables
-- Fournis des conseils fiscaux adaptés aux crypto-actifs
+- Fournis des conseils fiscaux adaptés aux crypto-actifs et à la TVA
+- Calcule automatiquement HT/TTC/TVA quand pertinent
 
-### 2. Audit On-Chain
+### 2. Audit On-Chain Avancé
 Quand tu reçois des données de ledger:
 - Analyse les transactions pour détecter les anomalies
-- Vérifie l'équilibre débit/crédit
+- Vérifie l'équilibre débit/crédit strict
 - Identifie les doubles saisies potentielles
 - Évalue les risques de rupture de trésorerie
 - Calcule le score de santé financière (0-100%)
-- Propose des optimisations concrètes
+- Vérifie la conformité TVA (taux corrects, déclarations)
+- Analyse les flux crypto vs fiat
+- Propose des optimisations fiscales concrètes
 
 ### 3. Analyse de Fichiers
 - Analyse Excel, CSV, PDF pour extraire des données financières
-- Calcule les ratios: solvabilité, liquidité, burn-rate
+- Calcule les ratios: solvabilité, liquidité, burn-rate, BFR
 - Compare avec les standards du secteur
+- Identifie les erreurs de TVA
 - Propose des optimisations fiscales
 
-### 4. Voice-to-Entry
+### 4. Voice-to-Entry avec TVA
 Quand tu reçois une transcription vocale, extrais en JSON:
 {
-  "montant": number,
-  "devise": "HBAR" | "EUR" | "USD",
+  "montant": number (TTC si TVA applicable),
+  "devise": "HBAR" | "EUR" | "USD" | "USDC",
   "categorie": string,
   "tiers": string,
   "description": string,
   "type": "debit" | "credit",
-  "txHash": string | null
+  "txHash": string | null,
+  "tvaRate": number | null (20, 10, 5.5, 2.1, ou 0),
+  "montantHT": number | null,
+  "montantTVA": number | null
 }
 
 ## RÈGLES DE RÉPONSE
-1. Sois concis mais technique
-2. Utilise des émojis pertinents (📊 💰 ⚠️ ✅)
+1. Sois précis et professionnel
+2. Utilise des émojis pertinents (📊 💰 ⚠️ ✅ 🧾 📈)
 3. Structure avec des listes et des headers markdown
-4. Pour les audits, commence par un résumé puis détaille
+4. Pour les audits, commence par un résumé exécutif puis détaille
 5. Fournis toujours des recommandations actionnables
-6. Si les données sont insuffisantes, demande plus d'informations
-7. Mentionne toujours le réseau Hedera quand pertinent
+6. Mentionne les implications TVA quand pertinent
+7. Pour les crypto-actifs, rappelle les obligations déclaratives
 
 ## FORMAT DE SORTIE AUDIT
-\`\`\`
-## 📊 Résumé de l'Audit
+\`\`\`markdown
+## 📊 Rapport d'Audit Comptara
 
-### Score de Santé: XX%
-[Barre de progression visuelle]
+### Score de Santé Financière: XX%
 
-### 🔍 Anomalies Détectées
+### 🔍 Synthèse Exécutive
+[Résumé en 2-3 phrases]
+
+### ✅ Points Forts
 - ...
 
-### ✅ Points Positifs
+### ⚠️ Anomalies Détectées
 - ...
 
-### ⚠️ Recommandations
-1. ...
-2. ...
+### 🧾 Conformité TVA
+- Taux appliqués: OK/À vérifier
+- Total TVA collectée: XXX €
+- Total TVA déductible: XXX €
+
+### 💡 Recommandations Prioritaires
+1. [Action immédiate]
+2. [Action court terme]
+3. [Optimisation]
+
+### 📈 Indicateurs Clés
+- Ratio débit/crédit: X.XX
+- Taux de vérification on-chain: XX%
+- Burn rate mensuel estimé: XXX
 \`\`\``;
 
 serve(async (req) => {
@@ -100,79 +131,146 @@ serve(async (req) => {
 
     switch (action) {
       case "voice-to-entry":
-        userMessage = `Analyse cette transcription vocale et extrais les données comptables.
+        userMessage = `Analyse cette transcription vocale d'une opération comptable et extrais les données structurées.
 
 Transcription: "${transcription}"
 
+IMPORTANT: Détecte si la TVA est mentionnée et calcule automatiquement les montants HT/TTC/TVA.
+
 Retourne UNIQUEMENT un JSON valide avec ce format exact:
 {
-  "montant": <nombre>,
-  "devise": "<HBAR|EUR|USD>",
-  "categorie": "<catégorie>",
-  "tiers": "<tiers/fournisseur>",
-  "description": "<description>",
+  "montant": <nombre TTC>,
+  "devise": "<HBAR|EUR|USD|USDC>",
+  "categorie": "<catégorie comptable>",
+  "tiers": "<nom fournisseur/client>",
+  "description": "<description claire>",
   "type": "<debit|credit>",
-  "txHash": null
+  "txHash": null,
+  "tvaRate": <20|10|5.5|2.1|0|null>,
+  "montantHT": <nombre ou null>,
+  "montantTVA": <nombre ou null>
 }
 
-Si tu ne peux pas extraire certaines informations, utilise null pour ces champs.`;
+Si certaines informations ne sont pas clairement mentionnées, utilise null.`;
         break;
 
       case "audit":
         const summary = ledgerData?.summary || {};
-        userMessage = `## Données du Ledger à Auditer
+        userMessage = `## 📋 Données du Ledger à Auditer
 
-### Résumé
-- Total écritures: ${summary.totalEntries || 0}
+### Résumé Global
+- Total écritures comptables: ${summary.totalEntries || 0}
 - Total paiements: ${summary.totalPayments || 0}
 - Volume débits: ${summary.totalDebits?.toFixed(2) || 0} HBAR
 - Volume paiements: ${summary.totalPaymentAmount?.toFixed(2) || 0} HBAR
+- Total TVA enregistrée: ${summary.totalTVA?.toFixed(2) || 0} €
 
-### Écritures Comptables
+### Écritures Comptables Détaillées
 ${JSON.stringify(ledgerData?.entries || [], null, 2)}
 
-### Paiements
+### Paiements Détaillés
 ${JSON.stringify(ledgerData?.payments || [], null, 2)}
 
 ---
 
-Effectue un audit complet:
-1. Vérifie l'équilibre débit/crédit
-2. Détecte les anomalies (doubles saisies, incohérences)
-3. Évalue la santé financière (score 0-100%)
-4. Identifie les risques de trésorerie
-5. Propose des optimisations concrètes
+## Mission d'Audit
 
-Utilise le format markdown structuré avec émojis.`;
+Effectue un audit comptable complet avec les analyses suivantes:
+
+1. **Équilibre Comptable**
+   - Vérifie la balance débit/crédit
+   - Identifie les écarts significatifs
+
+2. **Détection d'Anomalies**
+   - Doubles saisies potentielles
+   - Montants inhabituels
+   - Incohérences de dates
+
+3. **Conformité TVA**
+   - Vérifie les taux appliqués
+   - Calcule la TVA collectée vs déductible
+   - Identifie les erreurs de taux
+
+4. **Santé Financière**
+   - Score global (0-100%)
+   - Risques de trésorerie
+   - Burn rate si applicable
+
+5. **Vérification Blockchain**
+   - Taux de transactions ancrées on-chain
+   - Transactions non vérifiées à risque
+
+6. **Recommandations**
+   - Actions immédiates
+   - Optimisations fiscales
+   - Améliorations processus
+
+Utilise le format markdown structuré avec émojis pour la lisibilité.`;
         break;
 
       case "analyze-file":
-        userMessage = `## Données Financières à Analyser
+        userMessage = `## 📂 Données Financières à Analyser
 
 ${JSON.stringify(fileData, null, 2)}
 
 ---
 
-${prompt || "Effectue une analyse financière complète: ratios de solvabilité, liquidité, burn-rate, et propose des optimisations fiscales."}
+${prompt || "Effectue une analyse financière complète incluant:"}
 
-Structure ta réponse avec des sections claires et des émojis.`;
+1. **Ratios Financiers**
+   - Solvabilité
+   - Liquidité générale et immédiate
+   - BFR (Besoin en Fonds de Roulement)
+
+2. **Analyse TVA**
+   - Vérification des taux appliqués
+   - Calcul TVA collectée/déductible
+   - Crédit ou dette TVA
+
+3. **Tendances**
+   - Évolution du CA
+   - Burn rate mensuel
+   - Projection trésorerie
+
+4. **Optimisations**
+   - Recommandations fiscales
+   - Réduction des coûts
+   - Amélioration du BFR
+
+Structure ta réponse avec des sections claires, des chiffres précis et des émojis.`;
         break;
 
       case "chat":
       default:
-        userMessage = prompt || "Bonjour! Comment puis-je t'aider avec ta comptabilité blockchain?";
+        userMessage = prompt || "Bonjour! Comment puis-je t'aider avec ta comptabilité blockchain et la gestion de ta TVA?";
         
         if (ledgerData && (ledgerData.entries?.length > 0 || ledgerData.payments?.length > 0)) {
-          userMessage += `\n\n---\n## Contexte: Données du Ledger Actuel
-- ${ledgerData.entries?.length || 0} écritures comptables
-- ${ledgerData.payments?.length || 0} paiements
-- Volume total: ${((ledgerData.entries?.reduce((s: number, e: any) => s + (parseFloat(e.montant) || 0), 0) || 0) + 
-                   (ledgerData.payments?.reduce((s: number, p: any) => s + (parseFloat(p.montant) || 0), 0) || 0)).toFixed(2)} HBAR`;
+          const totalEntries = ledgerData.entries?.length || 0;
+          const totalPayments = ledgerData.payments?.length || 0;
+          const volumeTotal = (
+            (ledgerData.entries?.reduce((s: number, e: any) => s + (parseFloat(e.montant) || 0), 0) || 0) + 
+            (ledgerData.payments?.reduce((s: number, p: any) => s + (parseFloat(p.montant) || 0), 0) || 0)
+          ).toFixed(2);
+          const totalTVA = ledgerData.entries?.reduce((s: number, e: any) => s + (parseFloat(e.montant_tva) || 0), 0) || 0;
+          const entriesWithTVA = ledgerData.entries?.filter((e: any) => e.tva_rate !== null).length || 0;
+          
+          userMessage += `
+
+---
+## 📊 Contexte: État du Ledger Actuel
+- **${totalEntries} écritures** comptables
+- **${totalPayments} paiements** enregistrés
+- **Volume total:** ${volumeTotal} HBAR
+- **${entriesWithTVA} écritures avec TVA** (total: ${totalTVA.toFixed(2)} €)
+
+Tu peux me poser des questions sur ces données ou demander une analyse spécifique.`;
         }
         break;
     }
 
     messages.push({ role: "user", content: userMessage });
+
+    console.log(`AI Accountant - Action: ${action}, Messages: ${messages.length}`);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -185,7 +283,7 @@ Structure ta réponse avec des sections claires et des émojis.`;
         messages,
         stream: true,
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: 3000,
       }),
     });
 
