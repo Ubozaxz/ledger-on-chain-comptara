@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mic, MicOff, Loader2, CheckCircle, AlertCircle, Square, BookOpen, CreditCard, Copy } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Mic, MicOff, Loader2, CheckCircle, AlertCircle, Square, BookOpen, CreditCard, Copy, Wand2, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ExtractedEntry {
@@ -13,6 +14,9 @@ interface ExtractedEntry {
   type?: "debit" | "credit";
   txHash?: string;
   raw?: string;
+  tvaRate?: number;
+  montantHT?: number;
+  montantTVA?: number;
 }
 
 interface VoiceToEntryProps {
@@ -29,13 +33,47 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [lastResult, setLastResult] = useState<ExtractedEntry | null>(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioLevel, setAudioLevel] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationRef = useRef<number | null>(null);
   const { toast } = useToast();
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, []);
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Set up audio analyser for visual feedback
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      // Animate audio level
+      const updateLevel = () => {
+        if (analyserRef.current) {
+          const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+          analyserRef.current.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+          setAudioLevel(average / 255);
+        }
+        if (isRecording) {
+          animationRef.current = requestAnimationFrame(updateLevel);
+        }
+      };
       
       // Use supported mime type
       let mimeType = "audio/webm";
@@ -59,6 +97,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
+        audioContext.close();
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
         await processAudio(audioBlob);
       };
@@ -67,6 +106,16 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       setIsRecording(true);
       setTranscript("");
       setLastResult(null);
+      setRecordingTime(0);
+      
+      // Start timer
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+      
+      // Start audio level animation
+      updateLevel();
+      
     } catch (err: any) {
       console.error("Microphone access error:", err);
       toast({
@@ -81,6 +130,15 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      setAudioLevel(0);
     }
   };
 
@@ -128,11 +186,14 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           description: data.entry.description,
           type: data.entry.type,
           txHash: data.entry.txHash,
+          tvaRate: data.entry.tvaRate,
+          montantHT: data.entry.montantHT,
+          montantTVA: data.entry.montantTVA,
         };
         setLastResult(entry);
         onEntryExtracted(entry);
         toast({
-          title: "Données extraites",
+          title: "Données extraites avec succès",
           description: `${entry.description || "Nouvelle écriture"} - ${entry.montant} ${entry.devise}`,
         });
       } else {
@@ -183,17 +244,29 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <Card className="card-modern">
-      <CardHeader>
-        <CardTitle className="flex items-center space-x-2">
-          <Mic className="h-5 w-5 text-primary" />
-          <span>Voice-to-Entry</span>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Mic className="h-5 w-5 text-primary" />
+            <span>Voice-to-Entry</span>
+          </div>
+          <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+            <Wand2 className="h-3 w-3 mr-1" />
+            IA Avancée
+          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Dictez votre écriture comptable ou paiement. L'IA analysera et extraira les données automatiquement.
+          Dictez votre écriture comptable. L'IA analysera et extraira automatiquement les données (montant, TVA, catégorie, tiers).
         </p>
 
         {!hasMediaRecorder && (
@@ -204,15 +277,36 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         )}
 
         <div className="flex flex-col items-center space-y-4">
+          {/* Audio Level Indicator */}
+          {isRecording && (
+            <div className="flex items-center space-x-1 h-8">
+              {[...Array(12)].map((_, i) => (
+                <div 
+                  key={i}
+                  className="w-1 bg-primary rounded-full transition-all duration-75"
+                  style={{ 
+                    height: `${Math.max(8, Math.min(32, audioLevel * 32 + Math.random() * 8))}px`,
+                    opacity: audioLevel > i * 0.08 ? 1 : 0.3
+                  }}
+                />
+              ))}
+            </div>
+          )}
+          
           <Button
             onClick={toggleRecording}
             disabled={isProcessing || !hasMediaRecorder}
             size="lg"
             className={`h-20 w-20 rounded-full transition-all duration-300 touch-manipulation ${
               isRecording
-                ? "bg-destructive hover:bg-destructive/90 animate-pulse"
+                ? "bg-destructive hover:bg-destructive/90 scale-110"
                 : "bg-gradient-primary hover:opacity-90"
             }`}
+            style={{
+              boxShadow: isRecording 
+                ? `0 0 ${20 + audioLevel * 30}px rgba(239, 68, 68, ${0.4 + audioLevel * 0.4})` 
+                : undefined
+            }}
           >
             {isProcessing ? (
               <Loader2 className="h-8 w-8 animate-spin" />
@@ -223,24 +317,32 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             )}
           </Button>
 
-          <p className="text-sm text-muted-foreground text-center">
-            {isProcessing
-              ? "Analyse en cours..."
-              : isRecording
-              ? "Enregistrement... (appuyez pour arrêter)"
-              : "Appuyez pour dicter"}
-          </p>
+          <div className="text-center">
+            {isRecording && (
+              <Badge variant="destructive" className="mb-2 animate-pulse">
+                <Volume2 className="h-3 w-3 mr-1" />
+                {formatTime(recordingTime)}
+              </Badge>
+            )}
+            <p className="text-sm text-muted-foreground">
+              {isProcessing
+                ? "Analyse IA en cours..."
+                : isRecording
+                ? "Parlez maintenant (appuyez pour arrêter)"
+                : "Appuyez pour dicter"}
+            </p>
+          </div>
         </div>
 
         {transcript && (
           <div className="bg-muted/50 rounded-lg p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Transcription</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Transcription</p>
               <Button variant="ghost" size="sm" onClick={copyToClipboard} className="h-7 px-2">
                 <Copy className="h-3 w-3" />
               </Button>
             </div>
-            <p className="text-sm">{transcript}</p>
+            <p className="text-sm leading-relaxed">{transcript}</p>
           </div>
         )}
 
@@ -248,32 +350,46 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           <div className="bg-success/10 border border-success/20 rounded-lg p-4 space-y-3">
             <div className="flex items-center space-x-2">
               <CheckCircle className="h-4 w-4 text-success" />
-              <p className="text-xs text-success uppercase tracking-wider">Données extraites</p>
+              <p className="text-xs text-success uppercase tracking-wider font-medium">Données extraites</p>
             </div>
             
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="grid grid-cols-2 gap-3 text-sm">
               {lastResult.montant && (
-                <div>
-                  <span className="text-muted-foreground">Montant:</span>{" "}
-                  <span className="font-medium">{lastResult.montant} {lastResult.devise}</span>
+                <div className="bg-background/50 rounded-lg p-2">
+                  <span className="text-xs text-muted-foreground block">Montant</span>
+                  <span className="font-bold text-lg">{lastResult.montant} {lastResult.devise}</span>
                 </div>
               )}
               {lastResult.categorie && (
-                <div>
-                  <span className="text-muted-foreground">Catégorie:</span>{" "}
+                <div className="bg-background/50 rounded-lg p-2">
+                  <span className="text-xs text-muted-foreground block">Catégorie</span>
                   <span className="font-medium">{lastResult.categorie}</span>
                 </div>
               )}
               {lastResult.tiers && (
-                <div>
-                  <span className="text-muted-foreground">Tiers:</span>{" "}
+                <div className="bg-background/50 rounded-lg p-2">
+                  <span className="text-xs text-muted-foreground block">Tiers</span>
                   <span className="font-medium">{lastResult.tiers}</span>
                 </div>
               )}
               {lastResult.type && (
-                <div>
-                  <span className="text-muted-foreground">Type:</span>{" "}
-                  <span className="font-medium">{lastResult.type}</span>
+                <div className="bg-background/50 rounded-lg p-2">
+                  <span className="text-xs text-muted-foreground block">Type</span>
+                  <Badge variant={lastResult.type === 'credit' ? 'default' : 'secondary'}>
+                    {lastResult.type}
+                  </Badge>
+                </div>
+              )}
+              {lastResult.tvaRate && (
+                <div className="bg-background/50 rounded-lg p-2">
+                  <span className="text-xs text-muted-foreground block">TVA</span>
+                  <span className="font-medium">{lastResult.tvaRate}%</span>
+                </div>
+              )}
+              {lastResult.description && (
+                <div className="col-span-2 bg-background/50 rounded-lg p-2">
+                  <span className="text-xs text-muted-foreground block">Description</span>
+                  <span className="font-medium">{lastResult.description}</span>
                 </div>
               )}
             </div>
@@ -285,7 +401,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
                   variant="outline" 
                   size="sm" 
                   onClick={handleInsertToJournal}
-                  className="flex-1 border-primary/30 hover:bg-primary/10"
+                  className="flex-1 border-primary/30 hover:bg-primary/10 h-10"
                 >
                   <BookOpen className="h-4 w-4 mr-2" />
                   Insérer en écriture
@@ -296,7 +412,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
                   variant="outline" 
                   size="sm" 
                   onClick={handleInsertToPayment}
-                  className="flex-1 border-primary/30 hover:bg-primary/10"
+                  className="flex-1 border-primary/30 hover:bg-primary/10 h-10"
                 >
                   <CreditCard className="h-4 w-4 mr-2" />
                   Insérer en paiement
@@ -307,13 +423,14 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         )}
 
         {lastResult && !lastResult.montant && lastResult.raw && (
-          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+          <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 space-y-2">
             <div className="flex items-center space-x-2">
-              <AlertCircle className="h-4 w-4 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">Aucune donnée comptable détectée</p>
+              <AlertCircle className="h-4 w-4 text-warning" />
+              <p className="text-xs text-warning font-medium">Données incomplètes</p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Essayez de dicter plus clairement avec le montant, la devise et la description.
+              Essayez de dicter plus clairement avec le montant, la devise et la description. 
+              Exemple: "Achat fournitures bureau 150 euros TVA 20% chez Office Depot"
             </p>
           </div>
         )}

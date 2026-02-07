@@ -4,10 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   ShieldCheck, AlertTriangle, TrendingUp, TrendingDown, 
   Loader2, RefreshCw, CheckCircle, XCircle, Info,
-  BarChart3, PieChart, Target
+  BarChart3, PieChart, Target, Lightbulb, FileText,
+  Percent, Calculator, AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from "react-markdown";
@@ -22,6 +24,14 @@ interface AuditMetric {
   value: string | number;
   status: "good" | "warning" | "critical" | "info";
   icon: any;
+  description?: string;
+}
+
+interface Recommendation {
+  type: "success" | "warning" | "critical" | "info";
+  title: string;
+  description: string;
+  action?: string;
 }
 
 export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
@@ -29,6 +39,7 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
   const [auditResult, setAuditResult] = useState<string | null>(null);
   const [healthScore, setHealthScore] = useState<number | null>(null);
   const [metrics, setMetrics] = useState<AuditMetric[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const { toast } = useToast();
 
   const calculateMetrics = (): AuditMetric[] => {
@@ -56,32 +67,109 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
     const categorizedEntries = entries.filter(e => e.category && e.category !== "").length;
     const categorizationRate = totalEntries > 0 ? (categorizedEntries / totalEntries) * 100 : 100;
 
+    // TVA tracking
+    const entriesWithTVA = entries.filter(e => e.tva_rate !== null && e.tva_rate !== undefined).length;
+    const tvaRate = totalEntries > 0 ? (entriesWithTVA / totalEntries) * 100 : 0;
+    const totalTVA = entries.reduce((sum, e) => sum + (parseFloat(e.montant_tva) || 0), 0);
+
     return [
       {
-        label: "Transactions vérifiées",
+        label: "Vérification On-chain",
         value: `${verificationRate.toFixed(0)}%`,
         status: verificationRate >= 80 ? "good" : verificationRate >= 50 ? "warning" : "critical",
-        icon: verificationRate >= 80 ? CheckCircle : verificationRate >= 50 ? AlertTriangle : XCircle
+        icon: verificationRate >= 80 ? CheckCircle : verificationRate >= 50 ? AlertTriangle : XCircle,
+        description: `${verifiedEntries + verifiedPayments} transactions vérifiées sur ${totalEntries + totalPayments}`
       },
       {
-        label: "Balance Débit/Crédit",
+        label: "Balance Comptable",
         value: isBalanced ? "Équilibré" : `${balance > 0 ? "+" : ""}${balance.toFixed(2)}`,
         status: isBalanced ? "good" : Math.abs(balance) < entriesAmount * 0.1 ? "warning" : "critical",
-        icon: isBalanced ? CheckCircle : AlertTriangle
+        icon: isBalanced ? CheckCircle : AlertTriangle,
+        description: isBalanced ? "Débits = Crédits" : "Écart détecté entre débits et crédits"
       },
       {
-        label: "Volume total",
-        value: `${(entriesAmount + paymentsAmount).toLocaleString()} HBAR`,
+        label: "Volume Total",
+        value: `${(entriesAmount + paymentsAmount).toLocaleString()}`,
         status: "info",
-        icon: BarChart3
+        icon: BarChart3,
+        description: `${totalEntries} écritures, ${totalPayments} paiements`
       },
       {
         label: "Catégorisation",
         value: `${categorizationRate.toFixed(0)}%`,
         status: categorizationRate >= 80 ? "good" : categorizationRate >= 50 ? "warning" : "critical",
-        icon: categorizationRate >= 80 ? CheckCircle : Target
+        icon: categorizationRate >= 80 ? CheckCircle : Target,
+        description: `${categorizedEntries} écritures catégorisées sur ${totalEntries}`
+      },
+      {
+        label: "Suivi TVA",
+        value: `${tvaRate.toFixed(0)}%`,
+        status: tvaRate >= 70 ? "good" : tvaRate >= 40 ? "warning" : "info",
+        icon: Percent,
+        description: `Total TVA: ${totalTVA.toFixed(2)} - ${entriesWithTVA} écritures avec TVA`
+      },
+      {
+        label: "Moyenne Transaction",
+        value: `${(totalEntries + totalPayments > 0 ? (entriesAmount + paymentsAmount) / (totalEntries + totalPayments) : 0).toFixed(2)}`,
+        status: "info",
+        icon: Calculator,
+        description: "Montant moyen par transaction"
       }
     ];
+  };
+
+  const generateRecommendations = (metrics: AuditMetric[]): Recommendation[] => {
+    const recs: Recommendation[] = [];
+    
+    const verificationMetric = metrics.find(m => m.label === "Vérification On-chain");
+    if (verificationMetric && verificationMetric.status === "critical") {
+      recs.push({
+        type: "warning",
+        title: "Faible taux de vérification blockchain",
+        description: "Moins de 50% de vos transactions sont ancrées on-chain. Activez l'ancrage blockchain pour plus de traçabilité.",
+        action: "Activer l'ancrage automatique"
+      });
+    }
+    
+    const balanceMetric = metrics.find(m => m.label === "Balance Comptable");
+    if (balanceMetric && balanceMetric.status !== "good") {
+      recs.push({
+        type: "critical",
+        title: "Déséquilibre comptable détecté",
+        description: "Vos débits et crédits ne sont pas équilibrés. Vérifiez vos écritures récentes.",
+        action: "Vérifier les écritures"
+      });
+    }
+    
+    const tvaMetric = metrics.find(m => m.label === "Suivi TVA");
+    if (tvaMetric && (tvaMetric.status === "warning" || tvaMetric.status === "info")) {
+      recs.push({
+        type: "info",
+        title: "Améliorer le suivi TVA",
+        description: "Certaines écritures n'ont pas de TVA renseignée. Complétez pour faciliter vos déclarations fiscales.",
+        action: "Configurer la TVA"
+      });
+    }
+
+    const catMetric = metrics.find(m => m.label === "Catégorisation");
+    if (catMetric && catMetric.status !== "good") {
+      recs.push({
+        type: "warning",
+        title: "Catégorisation incomplète",
+        description: "Catégorisez vos écritures pour de meilleurs rapports et analyses.",
+        action: "Catégoriser les écritures"
+      });
+    }
+
+    if (entries.length >= 5 && recs.length === 0) {
+      recs.push({
+        type: "success",
+        title: "Excellent état comptable",
+        description: "Votre comptabilité est bien tenue. Continuez ainsi!",
+      });
+    }
+
+    return recs;
   };
 
   const analyzeLedger = async () => {
@@ -99,7 +187,9 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
     setHealthScore(null);
 
     // Calculer les métriques immédiatement
-    setMetrics(calculateMetrics());
+    const calculatedMetrics = calculateMetrics();
+    setMetrics(calculatedMetrics);
+    setRecommendations(generateRecommendations(calculatedMetrics));
 
     try {
       const ledgerData = {
@@ -112,6 +202,9 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
           description: e.description || e.libelle,
           txHash: e.tx_hash,
           category: e.category,
+          tvaRate: e.tva_rate,
+          montantHT: e.montant_ht,
+          montantTVA: e.montant_tva,
         })),
         payments: payments.map(p => ({
           id: p.id,
@@ -129,6 +222,7 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
           totalPayments: payments.length,
           totalDebits: entries.reduce((sum, e) => sum + (parseFloat(e.montant) || 0), 0),
           totalPaymentAmount: payments.reduce((sum, p) => sum + (parseFloat(p.montant) || 0), 0),
+          totalTVA: entries.reduce((sum, e) => sum + (parseFloat(e.montant_tva) || 0), 0),
         },
       };
 
@@ -209,9 +303,9 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
     const lowerAnalysis = analysis.toLowerCase();
     
     // Pénalités pour problèmes détectés
-    const criticalKeywords = ['anomalie majeure', 'erreur critique', 'fraude', 'double saisie'];
-    const warningKeywords = ['incohérence', 'attention', 'risque', 'vérifier'];
-    const positiveKeywords = ['correct', 'cohérent', 'équilibré', 'excellent', 'conforme'];
+    const criticalKeywords = ['anomalie majeure', 'erreur critique', 'fraude', 'double saisie', 'incohérence grave'];
+    const warningKeywords = ['incohérence', 'attention', 'risque', 'vérifier', 'manquant'];
+    const positiveKeywords = ['correct', 'cohérent', 'équilibré', 'excellent', 'conforme', 'parfait'];
 
     criticalKeywords.forEach(keyword => {
       if (lowerAnalysis.includes(keyword)) score -= 15;
@@ -237,6 +331,10 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
     const total = entries.length + payments.length;
     if (total > 0 && verified / total < 0.5) score -= 10;
 
+    // Bonus TVA tracking
+    const withTVA = entries.filter(e => e.tva_rate !== null).length;
+    if (entries.length > 0 && withTVA / entries.length > 0.7) score += 5;
+
     return Math.max(0, Math.min(100, score));
   };
 
@@ -254,20 +352,32 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
 
   const getMetricStatusColor = (status: string) => {
     switch (status) {
-      case "good": return "text-success";
-      case "warning": return "text-warning";
-      case "critical": return "text-destructive";
-      default: return "text-primary";
+      case "good": return "text-success bg-success/10";
+      case "warning": return "text-warning bg-warning/10";
+      case "critical": return "text-destructive bg-destructive/10";
+      default: return "text-primary bg-primary/10";
     }
   };
+
+  const getRecIcon = (type: string) => {
+    switch (type) {
+      case "success": return <CheckCircle className="h-4 w-4 text-success" />;
+      case "warning": return <AlertTriangle className="h-4 w-4 text-warning" />;
+      case "critical": return <AlertCircle className="h-4 w-4 text-destructive" />;
+      default: return <Lightbulb className="h-4 w-4 text-primary" />;
+    }
+  };
+
+  const displayedMetrics = metrics.length > 0 ? metrics : calculateMetrics();
+  const displayedRecs = recommendations.length > 0 ? recommendations : generateRecommendations(displayedMetrics);
 
   return (
     <Card className="card-modern">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center justify-between">
+        <CardTitle className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center space-x-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            <span>Audit IA Avancé</span>
+            <span>Audit IA Comptable</span>
           </div>
           <Button
             onClick={analyzeLedger}
@@ -290,64 +400,112 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Métriques rapides */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {(metrics.length > 0 ? metrics : calculateMetrics()).map((metric, idx) => (
-            <div key={idx} className="bg-muted/50 rounded-lg p-3 text-center space-y-1">
-              <metric.icon className={`h-5 w-5 mx-auto ${getMetricStatusColor(metric.status)}`} />
-              <p className="text-lg font-bold text-foreground">{metric.value}</p>
-              <p className="text-xs text-muted-foreground">{metric.label}</p>
-            </div>
-          ))}
-        </div>
+        <Tabs defaultValue="metrics" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsTrigger value="metrics" className="text-xs">
+              <PieChart className="h-3 w-3 mr-1" />
+              Métriques
+            </TabsTrigger>
+            <TabsTrigger value="recommendations" className="text-xs">
+              <Lightbulb className="h-3 w-3 mr-1" />
+              Conseils
+            </TabsTrigger>
+            <TabsTrigger value="report" className="text-xs">
+              <FileText className="h-3 w-3 mr-1" />
+              Rapport
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Score de santé */}
-        {healthScore !== null && (
-          <div className="bg-card border rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                {healthScore >= 60 ? (
-                  <TrendingUp className={`h-5 w-5 ${getHealthColor(healthScore)}`} />
-                ) : (
-                  <TrendingDown className={`h-5 w-5 ${getHealthColor(healthScore)}`} />
-                )}
-                <span className="font-medium">Score de Santé Financière</span>
+          <TabsContent value="metrics" className="space-y-4">
+            {/* Métriques rapides */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {displayedMetrics.map((metric, idx) => (
+                <div key={idx} className={`rounded-lg p-3 text-center space-y-1 ${getMetricStatusColor(metric.status)}`}>
+                  <metric.icon className="h-5 w-5 mx-auto" />
+                  <p className="text-lg font-bold">{metric.value}</p>
+                  <p className="text-xs opacity-80">{metric.label}</p>
+                  {metric.description && (
+                    <p className="text-[10px] opacity-60">{metric.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Score de santé */}
+            {healthScore !== null && (
+              <div className="bg-card border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    {healthScore >= 60 ? (
+                      <TrendingUp className={`h-5 w-5 ${getHealthColor(healthScore)}`} />
+                    ) : (
+                      <TrendingDown className={`h-5 w-5 ${getHealthColor(healthScore)}`} />
+                    )}
+                    <span className="font-medium">Score de Santé Financière</span>
+                  </div>
+                  <Badge className={getHealthBadge(healthScore).bg}>
+                    {getHealthBadge(healthScore).text}
+                  </Badge>
+                </div>
+                <Progress value={healthScore} className="h-3" />
+                <p className={`text-center text-3xl font-bold ${getHealthColor(healthScore)}`}>
+                  {healthScore}%
+                </p>
               </div>
-              <Badge className={getHealthBadge(healthScore).bg}>
-                {getHealthBadge(healthScore).text}
-              </Badge>
-            </div>
-            <Progress value={healthScore} className="h-3" />
-            <p className={`text-center text-3xl font-bold ${getHealthColor(healthScore)}`}>
-              {healthScore}%
-            </p>
-          </div>
-        )}
+            )}
+          </TabsContent>
 
-        {/* Résultats d'audit */}
-        {auditResult && (
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <Info className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Rapport d'Audit Détaillé</span>
-            </div>
-            <ScrollArea className="h-64 rounded-lg border bg-muted/30 p-4">
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown>{auditResult}</ReactMarkdown>
+          <TabsContent value="recommendations" className="space-y-3">
+            {displayedRecs.map((rec, idx) => (
+              <div 
+                key={idx} 
+                className={`rounded-lg p-3 border ${
+                  rec.type === 'success' ? 'bg-success/5 border-success/20' :
+                  rec.type === 'warning' ? 'bg-warning/5 border-warning/20' :
+                  rec.type === 'critical' ? 'bg-destructive/5 border-destructive/20' :
+                  'bg-primary/5 border-primary/20'
+                }`}
+              >
+                <div className="flex items-start space-x-3">
+                  {getRecIcon(rec.type)}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm">{rec.title}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{rec.description}</p>
+                    {rec.action && (
+                      <Button variant="link" size="sm" className="h-6 p-0 mt-2 text-xs">
+                        {rec.action} →
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
-            </ScrollArea>
-          </div>
-        )}
+            ))}
+            {displayedRecs.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground">
+                <Lightbulb className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Lancez un audit pour obtenir des conseils personnalisés</p>
+              </div>
+            )}
+          </TabsContent>
 
-        {!auditResult && !isAnalyzing && (
-          <div className="text-center py-6 text-muted-foreground">
-            <ShieldCheck className="h-12 w-12 mx-auto mb-4 opacity-30" />
-            <p className="font-medium">Prêt pour l'audit</p>
-            <p className="text-xs mt-1 max-w-xs mx-auto">
-              L'IA analysera vos {entries.length} écritures et {payments.length} paiements pour détecter anomalies et optimisations.
-            </p>
-          </div>
-        )}
+          <TabsContent value="report" className="space-y-3">
+            {auditResult ? (
+              <ScrollArea className="h-64 rounded-lg border bg-muted/30 p-4">
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown>{auditResult}</ReactMarkdown>
+                </div>
+              </ScrollArea>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <ShieldCheck className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                <p className="font-medium">Prêt pour l'audit</p>
+                <p className="text-xs mt-1 max-w-xs mx-auto">
+                  L'IA analysera vos {entries.length} écritures et {payments.length} paiements pour détecter anomalies et optimisations.
+                </p>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );
