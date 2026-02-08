@@ -34,7 +34,6 @@ interface AdminStats {
 interface UserData {
   id: string;
   user_id: string;
-  email: string;
   role: string;
   created_at: string;
   display_name: string | null;
@@ -107,9 +106,9 @@ export default function Admin() {
     
     setIsLoading(true);
     try {
-      // Fetch all profiles (users)
+      // Fetch all profiles via secure view (excludes email for privacy)
       const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
+        .from('profiles_public')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -448,11 +447,11 @@ export default function Admin() {
                           <div className="flex items-center space-x-3 min-w-0">
                             <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                               <span className="text-sm font-medium text-primary">
-                                {userData.email.charAt(0).toUpperCase()}
+                                {(userData.display_name || 'U').charAt(0).toUpperCase()}
                               </span>
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium text-sm truncate">{userData.display_name || userData.email}</p>
+                              <p className="font-medium text-sm truncate">{userData.display_name || `User ${userData.user_id.slice(0, 8)}`}</p>
                               <p className="text-xs text-muted-foreground truncate">
                                 {new Date(userData.created_at).toLocaleDateString('fr-FR')}
                               </p>
