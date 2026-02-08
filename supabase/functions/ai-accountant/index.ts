@@ -147,12 +147,56 @@ async function authenticateRequest(req: Request): Promise<{ user: { id: string; 
   }
 }
 
-// Input validation helper
+// Prompt injection detection patterns
+const DANGEROUS_PATTERNS = [
+  /ignore\s*(all\s*)?(previous|prior|above)\s*(instructions?|prompts?|rules?)/i,
+  /disregard\s*(all\s*)?(previous|prior|above)\s*(instructions?|prompts?|rules?)/i,
+  /forget\s*(all\s*)?(previous|prior|above|your)\s*(instructions?|prompts?|rules?)/i,
+  /reveal\s*(your)?\s*(system|hidden|secret)?\s*(prompt|instructions?)/i,
+  /show\s*(me\s*)?(your)?\s*(system|hidden|secret)?\s*(prompt|instructions?)/i,
+  /what\s*(are|is)\s*(your)?\s*(system|original)?\s*(prompt|instructions?)/i,
+  /you\s+are\s+now\s+(a|an|my)/i,
+  /pretend\s+(you\s+are|to\s+be)/i,
+  /act\s+as\s+(if|a|an)/i,
+  /new\s+(persona|identity|role)/i,
+  /jailbreak/i,
+  /dan\s+mode/i,
+  /developer\s+mode/i,
+  /bypass\s+(safety|security|filter)/i,
+  /override\s+(safety|security|rules?)/i,
+];
+
+// Check for prompt injection attempts
+function detectPromptInjection(input: string): boolean {
+  if (!input) return false;
+  return DANGEROUS_PATTERNS.some(pattern => pattern.test(input));
+}
+
+// Sanitize input by removing potentially dangerous control characters
+function sanitizeInput(input: string): string {
+  if (!input) return '';
+  // Remove control characters and excessive whitespace
+  return input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
+    .replace(/\s{10,}/g, ' ') // Collapse excessive whitespace
+    .trim();
+}
+
+// Input validation helper with injection protection
 function validateInput(input: string | undefined, maxLength: number): string {
   if (!input) return '';
+  
+  // First sanitize
+  const sanitized = sanitizeInput(input);
+  
+  // Check for prompt injection
+  if (detectPromptInjection(sanitized)) {
+    console.warn('Potential prompt injection attempt detected');
+    throw new Error('Invalid input detected');
+  }
+  
   // Truncate if too long
-  const truncated = input.slice(0, maxLength);
-  return truncated;
+  return sanitized.slice(0, maxLength);
 }
 
 serve(async (req) => {
