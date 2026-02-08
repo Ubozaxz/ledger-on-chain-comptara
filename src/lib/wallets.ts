@@ -109,9 +109,25 @@ export const connectMetaMask = async (): Promise<string> => {
 
   // If provider is available, use it directly
   if (ethereum) {
-    await ensureHederaTestnet();
-    const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-    return accounts[0];
+    try {
+      await ensureHederaTestnet();
+      const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+      if (!accounts || accounts.length === 0) {
+        throw new Error('Aucun compte sélectionné dans MetaMask');
+      }
+      return accounts[0];
+    } catch (error: any) {
+      // Handle user rejection (code 4001)
+      if (error?.code === 4001) {
+        throw new Error('Connexion refusée par l\'utilisateur');
+      }
+      // Handle MetaMask not unlocked
+      if (error?.code === -32002) {
+        throw new Error('MetaMask est verrouillé. Déverrouillez votre portefeuille.');
+      }
+      // Re-throw with cleaner message
+      throw new Error(error?.message || 'Échec de connexion à MetaMask');
+    }
   }
 
   // On mobile without provider: user needs to open in MetaMask browser
