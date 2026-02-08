@@ -6,8 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { FileSpreadsheet, Upload, Loader2, Send, X, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import * as XLSX from "xlsx";
-
+import ExcelJS from "exceljs";
 // File analyzer component with Excel, CSV, and PDF support
 export const FileAnalyzer = () => {
   const [isUploading, setIsUploading] = useState(false);
@@ -97,25 +96,42 @@ export const FileAnalyzer = () => {
     });
   };
 
-  const parseExcel = (file: File): Promise<any[]> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = e.target?.result;
-          // Use ArrayBuffer instead of BinaryString for better mobile compatibility
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-          resolve(jsonData as any[]);
-        } catch (error) {
-          console.error("Excel parsing error:", error);
-          reject(new Error("Erreur de parsing Excel. Vérifiez le format du fichier."));
+  const parseExcel = async (file: File): Promise<any[]> => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
+      
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        throw new Error("Aucune feuille trouvée dans le fichier Excel");
+      }
+      
+      const jsonData: any[] = [];
+      const headers: string[] = [];
+      
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) {
+          // First row is headers
+          row.eachCell((cell) => {
+            headers.push(String(cell.value || ''));
+          });
+        } else {
+          // Data rows
+          const rowData: any = {};
+          row.eachCell((cell, colNumber) => {
+            const header = headers[colNumber - 1] || `col${colNumber}`;
+            rowData[header] = cell.value;
+          });
+          jsonData.push(rowData);
         }
-      };
-      reader.onerror = () => reject(new Error("Erreur de lecture du fichier"));
-      reader.readAsArrayBuffer(file); // Changed from readAsBinaryString for iOS compatibility
-    });
+      });
+      
+      return jsonData;
+    } catch (error) {
+      console.error("Excel parsing error:", error);
+      throw new Error("Erreur de parsing Excel. Vérifiez le format du fichier.");
+    }
   };
 
   const parsePdf = async (file: File): Promise<any[]> => {
