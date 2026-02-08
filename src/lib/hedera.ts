@@ -38,35 +38,63 @@ export async function ensureHederaTestnet() {
       params: [{ chainId: HEDERA_TESTNET.chainId }],
     });
   } catch (switchErr: any) {
+    // 4001 = user rejected
+    if (switchErr?.code === 4001) {
+      throw new Error("Changement de réseau refusé par l'utilisateur");
+    }
     // 4902 = unknown chain
     if (switchErr?.code === 4902) {
-      await ethereum.request({
-        method: "wallet_addEthereumChain",
-        params: [{
-          chainId: HEDERA_TESTNET.chainId,
-          chainName: HEDERA_TESTNET.chainName,
-          nativeCurrency: HEDERA_TESTNET.nativeCurrency,
-          rpcUrls: HEDERA_TESTNET.rpcUrls,
-          blockExplorerUrls: HEDERA_TESTNET.blockExplorerUrls,
-        }],
-      });
-      // try switch again
-      await ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: HEDERA_TESTNET.chainId }],
-      });
+      try {
+        await ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: HEDERA_TESTNET.chainId,
+            chainName: HEDERA_TESTNET.chainName,
+            nativeCurrency: HEDERA_TESTNET.nativeCurrency,
+            rpcUrls: HEDERA_TESTNET.rpcUrls,
+            blockExplorerUrls: HEDERA_TESTNET.blockExplorerUrls,
+          }],
+        });
+        // try switch again
+        await ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: HEDERA_TESTNET.chainId }],
+        });
+      } catch (addErr: any) {
+        if (addErr?.code === 4001) {
+          throw new Error("Ajout du réseau Hedera refusé par l'utilisateur");
+        }
+        throw new Error(addErr?.message || "Impossible d'ajouter le réseau Hedera");
+      }
     } else {
-      throw switchErr;
+      throw new Error(switchErr?.message || "Impossible de changer de réseau");
     }
   }
 }
 
 export async function connectWallet(): Promise<string> {
   const ethereum = getEthereum();
-  if (!ethereum) throw new Error("MetaMask not found");
-  const accounts: string[] = await ethereum.request({ method: "eth_requestAccounts" });
-  if (!accounts || accounts.length === 0) throw new Error("Aucun compte MetaMask disponible");
-  return accounts[0];
+  if (!ethereum) {
+    throw new Error("MetaMask non détecté. Installez l'extension MetaMask.");
+  }
+  
+  try {
+    const accounts: string[] = await ethereum.request({ method: "eth_requestAccounts" });
+    if (!accounts || accounts.length === 0) {
+      throw new Error("Aucun compte MetaMask disponible");
+    }
+    return accounts[0];
+  } catch (error: any) {
+    // Handle user rejection (code 4001)
+    if (error?.code === 4001) {
+      throw new Error("Connexion refusée par l'utilisateur");
+    }
+    // Handle MetaMask not unlocked
+    if (error?.code === -32002) {
+      throw new Error("MetaMask est verrouillé. Déverrouillez votre portefeuille.");
+    }
+    throw new Error(error?.message || "Échec de connexion à MetaMask");
+  }
 }
 
 export async function getSelectedAddress(): Promise<string | null> {
