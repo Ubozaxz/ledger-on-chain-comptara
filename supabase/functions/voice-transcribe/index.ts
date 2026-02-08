@@ -42,6 +42,38 @@ async function authenticateRequest(req: Request): Promise<{ user: { id: string; 
   }
 }
 
+// Prompt injection detection patterns
+const DANGEROUS_PATTERNS = [
+  /ignore\s*(all\s*)?(previous|prior|above)\s*(instructions?|prompts?|rules?)/i,
+  /disregard\s*(all\s*)?(previous|prior|above)\s*(instructions?|prompts?|rules?)/i,
+  /forget\s*(all\s*)?(previous|prior|above|your)\s*(instructions?|prompts?|rules?)/i,
+  /reveal\s*(your)?\s*(system|hidden|secret)?\s*(prompt|instructions?)/i,
+  /show\s*(me\s*)?(your)?\s*(system|hidden|secret)?\s*(prompt|instructions?)/i,
+  /what\s*(are|is)\s*(your)?\s*(system|original)?\s*(prompt|instructions?)/i,
+  /you\s+are\s+now\s+(a|an|my)/i,
+  /pretend\s+(you\s+are|to\s+be)/i,
+  /act\s+as\s+(if|a|an)/i,
+  /jailbreak/i,
+  /dan\s+mode/i,
+  /developer\s+mode/i,
+  /bypass\s+(safety|security|filter)/i,
+];
+
+// Check for prompt injection attempts in any input
+function detectPromptInjection(input: string): boolean {
+  if (!input) return false;
+  return DANGEROUS_PATTERNS.some(pattern => pattern.test(input));
+}
+
+// Sanitize input
+function sanitizeInput(input: string): string {
+  if (!input) return '';
+  return input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/\s{10,}/g, ' ')
+    .trim();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -181,8 +213,8 @@ Génère un nouvel exemple unique et retourne le JSON structuré avec les calcul
     
     console.log("AI Response content:", content);
     
-    // Try to parse JSON from response
-    let result = { transcription: "Transcription non disponible", entry: null };
+    // Try to parse JSON from response with output validation
+    let result: { transcription: string; entry: any } = { transcription: "Transcription non disponible", entry: null };
     try {
       // Clean the response - remove markdown code blocks if present
       let cleanContent = content;
@@ -194,7 +226,32 @@ Génère un nouvel exemple unique et retourne le JSON structuré avec les calcul
       
       const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        // Validate output structure to prevent AI manipulation
+        if (typeof parsed.transcription === 'string') {
+          // Sanitize transcription output
+          result.transcription = sanitizeInput(parsed.transcription).slice(0, 500);
+        }
+        
+        // Validate entry structure if present
+        if (parsed.entry && typeof parsed.entry === 'object') {
+          const validDevises = ['HBAR', 'EUR', 'USD', 'USDC'];
+          const validTypes = ['debit', 'credit'];
+          const validTvaRates = [0, 2.1, 5.5, 10, 20, null];
+          
+          result.entry = {
+            montant: typeof parsed.entry.montant === 'number' ? Math.abs(parsed.entry.montant) : 0,
+            devise: validDevises.includes(parsed.entry.devise) ? parsed.entry.devise : 'EUR',
+            description: typeof parsed.entry.description === 'string' ? sanitizeInput(parsed.entry.description).slice(0, 200) : '',
+            type: validTypes.includes(parsed.entry.type) ? parsed.entry.type : 'debit',
+            categorie: typeof parsed.entry.categorie === 'string' ? sanitizeInput(parsed.entry.categorie).slice(0, 50) : '',
+            tiers: typeof parsed.entry.tiers === 'string' ? sanitizeInput(parsed.entry.tiers).slice(0, 100) : '',
+            tvaRate: validTvaRates.includes(parsed.entry.tvaRate) ? parsed.entry.tvaRate : null,
+            montantHT: typeof parsed.entry.montantHT === 'number' ? Math.abs(parsed.entry.montantHT) : null,
+            montantTVA: typeof parsed.entry.montantTVA === 'number' ? Math.abs(parsed.entry.montantTVA) : null,
+          };
+        }
         
         // Validate and calculate TVA if needed
         if (result.entry && result.entry.tvaRate && result.entry.montant) {
