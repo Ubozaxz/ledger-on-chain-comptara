@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileSpreadsheet, Upload, Loader2, Send, X, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ExcelJS from "exceljs";
+import { buildJsonHeaders } from "@/lib/auth-headers";
 // File analyzer component with Excel, CSV, and PDF support
 export const FileAnalyzer = () => {
   const [isUploading, setIsUploading] = useState(false);
@@ -139,12 +140,10 @@ export const FileAnalyzer = () => {
     try {
       const base64 = await fileToBase64(file);
       
+      const headers = await buildJsonHeaders();
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-accountant`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
+        headers,
         body: JSON.stringify({
           action: "extract-pdf",
           pdfBase64: base64,
@@ -188,15 +187,13 @@ export const FileAnalyzer = () => {
     setIsAnalyzing(true);
 
     try {
+      const analyzeHeaders = await buildJsonHeaders();
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-accountant`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
+        headers: analyzeHeaders,
         body: JSON.stringify({
           action: "analyze-file",
-          fileData: fileData.slice(0, 100), // Limit to first 100 rows
+          fileData: fileData.slice(0, 100),
           prompt: userQuestion,
         }),
       });
