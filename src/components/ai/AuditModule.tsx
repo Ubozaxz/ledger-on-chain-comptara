@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from "react-markdown";
+import { buildJsonHeaders } from "@/lib/auth-headers";
 
 interface AuditModuleProps {
   entries: any[];
@@ -226,12 +227,10 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
         },
       };
 
+      const headers = await buildJsonHeaders();
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-accountant`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
+        headers,
         body: JSON.stringify({
           action: "audit",
           ledgerData,

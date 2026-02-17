@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Mic, MicOff, Loader2, CheckCircle, AlertCircle, Square, BookOpen, CreditCard, Copy, Wand2, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { buildJsonHeaders } from "@/lib/auth-headers";
 
 interface ExtractedEntry {
   montant?: number;
@@ -157,14 +158,12 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       const base64Audio = await base64Promise;
 
       // Call edge function for transcription + extraction
+      const headers = await buildJsonHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-transcribe`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
+          headers,
           body: JSON.stringify({ audio: base64Audio }),
         }
       );

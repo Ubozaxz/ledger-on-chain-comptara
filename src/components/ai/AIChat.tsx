@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Bot, Send, Loader2, User, Sparkles, Lightbulb, TrendingUp, FileText, Calculator } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from "react-markdown";
+import { buildJsonHeaders } from "@/lib/auth-headers";
 
 interface Message {
   role: "user" | "assistant";
@@ -73,12 +74,10 @@ export const AIChat = ({ ledgerData }: AIChatProps) => {
     setIsLoading(true);
 
     try {
+      const headers = await buildJsonHeaders();
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-accountant`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
+        headers,
         body: JSON.stringify({
           action: "chat",
           prompt: textToSend,
