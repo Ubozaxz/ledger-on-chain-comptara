@@ -111,58 +111,55 @@ export const WalletConnector = ({
   };
 
   return (
-    <Card className="border-0 rounded-none shadow-lg bg-gradient-card border-b backdrop-blur-sm">
-      <div className="px-3 md:px-6 py-3 md:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-        <div className="flex items-center space-x-2 md:space-x-4 w-full sm:w-auto">
+    <Card className="border-0 rounded-none shadow-md bg-gradient-card border-b backdrop-blur-sm sticky top-0 z-50">
+      <div className="px-3 md:px-6 py-2 md:py-4 flex items-center justify-between gap-2">
+        <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
           <div className="flex items-center space-x-2 md:space-x-3">
             <div className="h-8 w-8 md:h-10 md:w-10 bg-gradient-primary rounded-lg flex items-center justify-center flex-shrink-0">
               <Shield className="h-4 w-4 md:h-6 md:w-6 text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg md:text-2xl font-bold text-gradient truncate">{t('appTitle')}</h1>
-              <p className="text-[10px] md:text-xs text-muted-foreground hidden sm:block">{t('appSubtitle')}</p>
+              <h1 className="text-base md:text-2xl font-bold text-gradient truncate">{t('appTitle')}</h1>
+              <p className="text-[9px] md:text-xs text-muted-foreground hidden sm:block">{t('appSubtitle')}</p>
             </div>
           </div>
-          <Badge variant="outline" className="text-[10px] md:text-xs bg-success/10 text-success border-success/20 flex-shrink-0 hidden sm:flex">
+          <Badge variant="outline" className="text-[9px] md:text-xs bg-success/10 text-success border-success/20 flex-shrink-0 hidden sm:flex">
             <div className="h-1.5 w-1.5 bg-success rounded-full mr-1 animate-pulse"></div>
-            {t('hederaTestnet')}
+            Testnet
           </Badge>
         </div>
 
-        <div className="flex items-center space-x-2 md:space-x-4 w-full sm:w-auto justify-between sm:justify-end">
-          <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 justify-end">
+          <div className="flex items-center space-x-1">
             <ThemeToggle />
             <Button
               variant="ghost"
               size="sm"
               onClick={toggleLanguage}
-              className="hover:bg-accent touch-manipulation h-9 w-9 p-0"
+              className="hover:bg-accent touch-manipulation h-8 w-8 p-0"
             >
               <Globe className="h-4 w-4" />
             </Button>
           </div>
 
           {isConnected && walletAddress ? (
-            <div className="flex items-center space-x-2 md:space-x-3">
-              <Card className="px-2 md:px-4 py-1.5 md:py-2 bg-gradient-card border-primary/20">
-                <div className="flex items-center space-x-1 md:space-x-2">
-                  <Wallet className="h-3 w-3 md:h-4 md:w-4 text-success" />
-                  <span className="text-xs md:text-sm font-mono text-foreground">
+            <div className="flex items-center space-x-1 md:space-x-2">
+              <Card className="px-2 md:px-3 py-1 md:py-2 bg-gradient-card border-primary/20">
+                <div className="flex items-center space-x-1">
+                  <Wallet className="h-3 w-3 text-success flex-shrink-0" />
+                  <span className="text-xs font-mono text-foreground">
                     {formatAddress(walletAddress)}
                   </span>
-                  <Badge variant="secondary" className="text-[10px] md:text-xs hidden sm:inline-flex">
-                    {t(walletType || 'metamask')}
-                  </Badge>
                 </div>
               </Card>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={onDisconnect}
-                className="hover:bg-destructive hover:text-destructive-foreground border-destructive/20 h-9 px-2 md:px-3"
+                className="hover:bg-destructive hover:text-destructive-foreground border-destructive/20 h-8 px-2 touch-manipulation"
               >
-                <LogOut className="h-4 w-4" />
-                <span className="ml-2 hidden md:inline">{t('disconnect')}</span>
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="ml-1 hidden md:inline text-xs">{t('disconnect')}</span>
               </Button>
             </div>
           ) : (

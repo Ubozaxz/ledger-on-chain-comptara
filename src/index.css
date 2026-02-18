@@ -162,25 +162,60 @@
   background-clip: text;
 }
 
-/* Mobile optimizations */
+/* Mobile optimizations - Android & iOS */
 @media (max-width: 768px) {
+  html {
+    /* Prevent iOS text size adjust */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    /* Prevent horizontal scroll */
+    overflow-x: hidden;
+    /* Better scroll behavior on iOS */
+    -webkit-overflow-scrolling: touch;
+  }
+
   .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
   }
-  
+
   .glass {
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
-  
+
   .card-modern {
-    margin: 0.5rem;
+    margin: 0;
+    border-radius: 0.75rem;
   }
-  
-  h1 {
-    line-height: 1.2;
+
+  /* Larger tap targets for mobile */
+  input, select, textarea {
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+    min-height: 44px;
   }
+
+  h1 { font-size: 1.5rem; line-height: 1.2; }
+  h2 { font-size: 1.25rem; }
+  h3 { font-size: 1.1rem; }
+
+  /* Full-width cards on mobile */
+  [class*="grid-cols-"] {
+    gap: 0.75rem;
+  }
+}
+
+/* Small phones */
+@media (max-width: 375px) {
+  .container {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  h1 { font-size: 1.25rem; }
 }
 
 /* Touch device optimizations */
@@ -190,17 +225,37 @@
     min-height: 44px;
     min-width: 44px;
     touch-action: manipulation;
+    /* Remove 300ms tap delay */
+    -webkit-tap-highlight-color: transparent;
   }
-  
+
   .touch-manipulation {
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Better scroll performance */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Safe area support for iPhone notch/home indicator */
+@supports (padding: max(0px)) {
+  .min-h-screen {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
   }
 }
 
 /* Reduce animations for performance on mobile */
 @media (max-width: 768px) {
   * {
-    animation-duration: 0.3s !important;
-    transition-duration: 0.3s !important;
+    animation-duration: 0.2s !important;
+    transition-duration: 0.2s !important;
+  }
+  
+  /* Disable hover transform on mobile (causes layout shift) */
+  .card-modern:hover {
+    transform: none;
   }
 }
