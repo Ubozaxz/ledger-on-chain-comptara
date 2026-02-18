@@ -242,7 +242,7 @@ const Index = () => {
         onDisconnect={handleDisconnect}
       />
       
-      <div className="container mx-auto px-3 md:px-4 py-4 md:py-8 space-y-4 md:space-y-8">
+      <div className="container mx-auto px-2 sm:px-4 py-3 md:py-8 space-y-3 md:space-y-8 max-w-7xl">
         {/* Status Banner */}
         <StatusBanner
           isAuthenticated={isAuthenticated}
@@ -360,26 +360,26 @@ const Index = () => {
 
         {/* Main Content - Mobile First Tabs */}
         <Tabs defaultValue="dashboard" className="space-y-4 md:space-y-8">
-          <TabsList ref={tabsRef} className="grid w-full grid-cols-5 bg-card border h-auto p-1">
-            <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
-              <BarChart3 className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline text-xs">Dashboard</span>
+          <TabsList ref={tabsRef} className="grid w-full grid-cols-5 bg-card border h-auto p-1 gap-0.5">
+            <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+              <BarChart3 className="h-4 w-4" />
+              <span className="text-[10px] leading-tight">Board</span>
             </TabsTrigger>
-            <TabsTrigger value="journal" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
-              <BookOpen className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline text-xs">Journal</span>
+            <TabsTrigger value="journal" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+              <BookOpen className="h-4 w-4" />
+              <span className="text-[10px] leading-tight">Journal</span>
             </TabsTrigger>
-            <TabsTrigger value="payments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
-              <CreditCard className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline text-xs">Paiements</span>
+            <TabsTrigger value="payments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+              <CreditCard className="h-4 w-4" />
+              <span className="text-[10px] leading-tight">Paiement</span>
             </TabsTrigger>
-            <TabsTrigger value="ai" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
-              <Bot className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline text-xs">IA</span>
+            <TabsTrigger value="ai" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+              <Bot className="h-4 w-4" />
+              <span className="text-[10px] leading-tight">IA</span>
             </TabsTrigger>
-            <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs py-2 px-1">
-              <FileBarChart className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline text-xs">Rapports</span>
+            <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+              <FileBarChart className="h-4 w-4" />
+              <span className="text-[10px] leading-tight">Rapports</span>
             </TabsTrigger>
           </TabsList>
           
