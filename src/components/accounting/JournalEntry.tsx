@@ -30,7 +30,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
     date: new Date().toISOString().split('T')[0],
     libelle: "",
     montant: "",
-    devise: "HBAR",
+    devise: "XOF",
     compteDebit: "",
     compteCredit: "",
     tvaRate: "",
@@ -148,7 +148,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
         date: new Date().toISOString().split('T')[0],
         libelle: "",
         montant: "",
-        devise: "HBAR",
+        devise: "XOF",
         compteDebit: "",
         compteCredit: "",
         tvaRate: tvaRates.find(r => r.is_default)?.code || "",
@@ -196,10 +196,11 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="HBAR">HBAR</SelectItem>
-                  <SelectItem value="USDC">USDC</SelectItem>
+                  <SelectItem value="XOF">XOF (FCFA)</SelectItem>
                   <SelectItem value="EUR">EUR</SelectItem>
                   <SelectItem value="USD">USD</SelectItem>
+                  <SelectItem value="HBAR">HBAR</SelectItem>
+                  <SelectItem value="USDC">USDC</SelectItem>
                 </SelectContent>
               </Select>
             </div>
