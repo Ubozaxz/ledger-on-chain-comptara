@@ -60,14 +60,15 @@ serve(async (req) => {
       });
     }
 
-    const finalTranscript = sanitizeInput(transcript).slice(0, 2000);
+    // Allow longer transcripts for extended recordings (up to 5 min)
+    const finalTranscript = sanitizeInput(transcript).slice(0, 5000);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    console.log(`Voice extraction for user ${user.id}: "${finalTranscript}"`);
+    console.log(`Voice extraction for user ${user.id}: "${finalTranscript.slice(0, 100)}..."`);
 
     const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -80,7 +81,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Tu es un extracteur de données comptables. Tu reçois une transcription vocale en français et tu dois extraire UNIQUEMENT les informations réellement présentes dans le texte.
+            content: `Tu es un extracteur de données comptables expert pour l'Afrique de l'Ouest francophone et la France. Tu reçois une transcription vocale en français et tu dois extraire UNIQUEMENT les informations réellement présentes dans le texte.
 
 RÈGLES ABSOLUES:
 1. N'INVENTE RIEN. Si une information n'est pas dans le texte, mets null.
@@ -88,20 +89,40 @@ RÈGLES ABSOLUES:
 3. La description doit reprendre les mots exacts du texte, pas une reformulation.
 4. Le tiers (fournisseur/client) doit être le nom exact mentionné.
 5. Si aucun montant n'est clairement dit, retourne montant: null.
+6. Si le texte est long, identifie CHAQUE opération distincte. Si plusieurs opérations, retourne celle avec le montant le plus élevé ET mentionne les autres dans la description.
 
-TAUX TVA reconnus: 20%, 10%, 5.5%, 2.1% (France), 18% (Côte d'Ivoire/UEMOA), 0%
-DEVISES: EUR (défaut), XOF/FCFA, USD, HBAR, USDC
+RECONNAISSANCE DES MONTANTS:
+- "soixante-quinze mille" = 75000
+- "deux millions cinq cent" = 2500000
+- "cent cinquante mille francs" = 150000
+- "1,5 million" = 1500000
+- Comprends les montants en lettres ET en chiffres
+- "mille francs CFA" ou "mille FCFA" = 1000 XOF
 
-CATÉGORIES: Achats/Fournisseurs, Ventes/Clients, Frais généraux, Salaires, Investissements, Trésorerie, Taxes/TVA
+DEVISES (par défaut XOF si contexte africain):
+- XOF / FCFA / francs CFA / francs → "XOF"
+- EUR / euros → "EUR"
+- USD / dollars → "USD"
+- HBAR → "HBAR"
+- USDC → "USDC"
+- Si aucune devise mentionnée et contexte UEMOA/Côte d'Ivoire → "XOF"
+- Si aucune devise mentionnée et contexte France → "EUR"
 
-TYPE: achat/dépense/paiement = "debit", vente/encaissement/recette = "credit"
+TAUX TVA reconnus:
+- 18% (Côte d'Ivoire/UEMOA - défaut si TVA mentionnée sans taux)
+- 20%, 10%, 5.5%, 2.1% (France)
+- 0% (exonéré)
+
+CATÉGORIES: Achats/Fournisseurs, Ventes/Clients, Frais généraux, Salaires, Investissements, Trésorerie, Taxes/TVA, Loyer, Transport, Communication, Assurance
+
+TYPE: achat/dépense/paiement/facture fournisseur = "debit", vente/encaissement/recette/facture client = "credit"
 
 Si TVA mentionnée et montant TTC donné:
 - montantHT = montant / (1 + tvaRate/100)
 - montantTVA = montant - montantHT
 
 Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
-{"entry":{"montant":<number|null>,"devise":"EUR","description":"<texte exact>","type":"debit","categorie":"<catégorie>","tiers":<"nom"|null>,"tvaRate":<number|null>,"montantHT":<number|null>,"montantTVA":<number|null>}}`
+{"entry":{"montant":<number|null>,"devise":"XOF","description":"<texte exact>","type":"debit","categorie":"<catégorie>","tiers":<"nom"|null>,"tvaRate":<number|null>,"montantHT":<number|null>,"montantTVA":<number|null>}}`
           },
           {
             role: "user",
@@ -109,7 +130,7 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
           }
         ],
         temperature: 0.05,
-        max_tokens: 500,
+        max_tokens: 800,
       }),
     });
 
@@ -148,8 +169,8 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
 
           entry = {
             montant: Math.abs(raw.montant),
-            devise: validDevises.includes(raw.devise) ? raw.devise : 'EUR',
-            description: typeof raw.description === 'string' ? sanitizeInput(raw.description).slice(0, 200) : finalTranscript.slice(0, 100),
+            devise: validDevises.includes(raw.devise) ? raw.devise : 'XOF',
+            description: typeof raw.description === 'string' ? sanitizeInput(raw.description).slice(0, 500) : finalTranscript.slice(0, 200),
             type: validTypes.includes(raw.type) ? raw.type : 'debit',
             categorie: typeof raw.categorie === 'string' ? sanitizeInput(raw.categorie).slice(0, 50) : null,
             tiers: typeof raw.tiers === 'string' && raw.tiers !== 'null' ? sanitizeInput(raw.tiers).slice(0, 100) : null,

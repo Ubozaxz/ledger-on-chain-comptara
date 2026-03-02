@@ -81,7 +81,7 @@ const Index = () => {
       debit: entry.debit || '',
       credit: entry.credit || '',
       montant: parseFloat(entry.montant) || 0,
-      devise: entry.devise || 'HBAR',
+      devise: entry.devise || 'XOF',
       tx_hash: entry.txHash || '',
       description: entry.description,
       category: entry.category,
@@ -94,7 +94,7 @@ const Index = () => {
       type: payment.type || 'paiement',
       destinataire: payment.destinataire || '',
       montant: parseFloat(payment.montant) || 0,
-      devise: payment.devise || 'HBAR',
+      devise: payment.devise || 'XOF',
       objet: payment.objet || '',
       tx_hash: payment.txHash || '',
       status: 'confirmed',
@@ -401,7 +401,7 @@ const Index = () => {
                       debit: entry.type === 'debit' ? entry.categorie || 'Divers' : '',
                       credit: entry.type === 'credit' ? entry.categorie || 'Divers' : '',
                       montant: entry.montant,
-                      devise: entry.devise || 'HBAR',
+                      devise: entry.devise || 'XOF',
                       txHash: entry.txHash || '',
                       description: entry.description,
                     });
@@ -411,7 +411,7 @@ const Index = () => {
                   // Navigate to journal tab and show pre-filled data
                   toast({
                     title: "Données prêtes",
-                    description: `${entry.montant} ${entry.devise || 'HBAR'} - Allez dans l'onglet Journal pour compléter`,
+                    description: `${entry.montant} ${entry.devise || 'XOF'} - Allez dans l'onglet Journal pour compléter`,
                   });
                   handleEntryAdded({
                     date: new Date().toISOString().split('T')[0],
@@ -419,7 +419,7 @@ const Index = () => {
                     debit: entry.type === 'debit' ? entry.categorie || 'Divers' : '',
                     credit: entry.type === 'credit' ? entry.categorie || 'Divers' : '',
                     montant: entry.montant || 0,
-                    devise: entry.devise || 'HBAR',
+                    devise: entry.devise || 'XOF',
                     txHash: entry.txHash || '',
                     description: entry.description,
                   });
@@ -428,13 +428,13 @@ const Index = () => {
                   // Save as payment
                   toast({
                     title: "Données prêtes",
-                    description: `${entry.montant} ${entry.devise || 'HBAR'} - Paiement enregistré`,
+                    description: `${entry.montant} ${entry.devise || 'XOF'} - Paiement enregistré`,
                   });
                   handlePaymentAdded({
                     type: entry.type === 'credit' ? 'encaissement' : 'paiement',
                     destinataire: entry.tiers || 'Non spécifié',
                     montant: entry.montant || 0,
-                    devise: entry.devise || 'HBAR',
+                    devise: entry.devise || 'XOF',
                     objet: entry.description || entry.categorie || 'Opération vocale',
                     txHash: entry.txHash || '',
                   });

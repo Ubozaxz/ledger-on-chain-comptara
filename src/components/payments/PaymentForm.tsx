@@ -21,7 +21,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
     type: "paiement",
     destinataire: "",
     montant: "",
-    devise: "HBAR",
+    devise: "XOF",
     objet: "",
   });
   const [executeOnChain, setExecuteOnChain] = useState(false);
@@ -85,7 +85,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
         type: "paiement",
         destinataire: "",
         montant: "",
-        devise: "HBAR",
+        devise: "XOF",
         objet: "",
       });
     } catch (err: any) {
@@ -157,9 +157,11 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="XOF">XOF (FCFA)</SelectItem>
+                  <SelectItem value="EUR">EUR</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
                   <SelectItem value="HBAR">HBAR</SelectItem>
                   <SelectItem value="USDC">USDC</SelectItem>
-                  <SelectItem value="EUR">EUR</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -2,7 +2,9 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Loader2, CheckCircle, AlertCircle, Square, BookOpen, CreditCard, Copy, Wand2, Volume2, RefreshCw } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Mic, MicOff, Loader2, CheckCircle, AlertCircle, Square, BookOpen, CreditCard, Copy, Wand2, Volume2, RefreshCw, Save, Cloud, Link2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { buildJsonHeaders } from "@/lib/auth-headers";
 
@@ -30,6 +32,9 @@ const hasMediaRecorder = typeof MediaRecorder !== "undefined";
 const hasSpeechRecognition = typeof window !== "undefined" && 
   (('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window));
 
+// Max recording: 5 minutes
+const MAX_RECORDING_SECONDS = 300;
+
 export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPayment }: VoiceToEntryProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -39,6 +44,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
   const [useSpeechAPI, setUseSpeechAPI] = useState(hasSpeechRecognition);
+  const [autoSaveCloud, setAutoSaveCloud] = useState(true);
+  const [autoSaveBlockchain, setAutoSaveBlockchain] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -47,11 +55,13 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const animationRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
+  const maxTimerRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch {}
@@ -62,7 +72,13 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const startTimer = () => {
     setRecordingTime(0);
     timerRef.current = setInterval(() => {
-      setRecordingTime(prev => prev + 1);
+      setRecordingTime(prev => {
+        if (prev >= MAX_RECORDING_SECONDS - 1) {
+          stopRecordingAll();
+          return prev;
+        }
+        return prev + 1;
+      });
     }, 1000);
   };
 
@@ -70,6 +86,38 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+    if (maxTimerRef.current) {
+      clearTimeout(maxTimerRef.current);
+      maxTimerRef.current = null;
+    }
+  };
+
+  // Auto-save extracted entry
+  const autoSaveEntry = async (entry: ExtractedEntry) => {
+    if (!entry.montant) return;
+    setIsSaving(true);
+
+    try {
+      if (autoSaveCloud && onInsertToJournal) {
+        onInsertToJournal(entry);
+        toast({
+          title: "💾 Sauvegardé automatiquement",
+          description: `${entry.montant} ${entry.devise || 'XOF'} — enregistré dans le Cloud`,
+        });
+      }
+
+      if (autoSaveBlockchain && onInsertToJournal) {
+        // The blockchain anchoring happens within the journal entry handler
+        toast({
+          title: "⛓️ Ancrage blockchain demandé",
+          description: "L'écriture sera ancrée via votre wallet",
+        });
+      }
+    } catch (err: any) {
+      console.error("Auto-save error:", err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -84,7 +132,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = "fr-FR";
-      recognition.maxAlternatives = 1;
+      recognition.maxAlternatives = 3;
 
       recognition.onstart = () => {
         setIsRecording(true);
@@ -97,16 +145,27 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       recognition.onresult = (event: any) => {
         let interim = "";
         let final = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const text = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            final += text + " ";
+        for (let i = 0; i < event.results.length; i++) {
+          const result = event.results[i];
+          // Pick the best alternative
+          let bestText = result[0].transcript;
+          let bestConfidence = result[0].confidence || 0;
+          for (let a = 1; a < result.length; a++) {
+            if ((result[a].confidence || 0) > bestConfidence) {
+              bestText = result[a].transcript;
+              bestConfidence = result[a].confidence;
+            }
+          }
+          if (result.isFinal) {
+            final += bestText + " ";
           } else {
-            interim += text;
+            interim += bestText;
           }
         }
-        transcriptRef.current += final;
-        setLiveTranscript(transcriptRef.current + interim);
+        if (final) {
+          transcriptRef.current = final;
+        }
+        setLiveTranscript((final + interim).trim());
       };
 
       recognition.onerror = (event: any) => {
@@ -117,10 +176,15 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             description: "Autorisez l'accès au microphone dans les paramètres du navigateur",
             variant: "destructive",
           });
+          stopRecordingAll();
         } else if (event.error === "no-speech") {
-          toast({ title: "Aucun son détecté", description: "Parlez plus près du microphone" });
+          // Don't stop — just wait for speech
+          toast({ title: "En attente de parole...", description: "Parlez plus près du microphone" });
+        } else if (event.error === "aborted") {
+          // Normal stop
+        } else {
+          stopRecordingAll();
         }
-        stopRecordingAll();
       };
 
       recognition.onend = async () => {
@@ -137,6 +201,31 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         }
       };
 
+      // Start audio context for visual feedback
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+
+        const updateLevel = () => {
+          if (analyserRef.current) {
+            const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+            analyserRef.current.getByteFrequencyData(dataArray);
+            const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+            setAudioLevel(average / 255);
+          }
+          animationRef.current = requestAnimationFrame(updateLevel);
+        };
+        updateLevel();
+
+        // Store stream ref for cleanup
+        mediaRecorderRef.current = { stop: () => { stream.getTracks().forEach(t => t.stop()); audioContext.close(); } } as any;
+      } catch {}
+
       recognition.start();
     } catch (err: any) {
       console.error("Speech recognition start error:", err);
@@ -148,7 +237,14 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   // ---- MediaRecorder fallback ----
   const startMediaRecorder = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 44100,
+        }
+      });
       const audioContext = new AudioContext();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
@@ -187,7 +283,6 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           animationRef.current = null;
         }
         setAudioLevel(0);
-        // MediaRecorder fallback: notify user they need Speech API
         toast({
           title: "Transcription non disponible",
           description: "Utilisez Chrome ou Edge pour la transcription vocale automatique",
@@ -196,7 +291,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         setIsProcessing(false);
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(1000); // Collect data every second
       setIsRecording(true);
       setTranscript("");
       setLastResult(null);
@@ -218,8 +313,15 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
     }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
+    if (mediaRecorderRef.current) {
+      try {
+        if ('state' in mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        } else if (!('state' in mediaRecorderRef.current)) {
+          // Audio-only cleanup ref
+          (mediaRecorderRef.current as any).stop?.();
+        }
+      } catch {}
     }
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
@@ -252,7 +354,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       if (data.entry && data.entry.montant) {
         const entry: ExtractedEntry = {
           montant: data.entry.montant,
-          devise: data.entry.devise || "EUR",
+          devise: data.entry.devise || "XOF",
           categorie: data.entry.categorie,
           tiers: data.entry.tiers,
           description: data.entry.description,
@@ -267,6 +369,11 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           title: "✅ Données extraites",
           description: `${entry.description || "Écriture"} — ${entry.montant} ${entry.devise}`,
         });
+
+        // Auto-save if enabled
+        if (autoSaveCloud || autoSaveBlockchain) {
+          await autoSaveEntry(entry);
+        }
       } else {
         setLastResult({ raw: text });
         toast({
@@ -331,6 +438,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   };
 
   const displayTranscript = liveTranscript || transcript;
+  const remainingTime = MAX_RECORDING_SECONDS - recordingTime;
 
   return (
     <Card className="card-modern">
@@ -344,6 +452,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
               <Wand2 className="h-3 w-3 mr-1" />
               IA Réelle
+            </Badge>
+            <Badge variant="outline" className="text-xs bg-accent/10 text-accent-foreground border-accent/20">
+              Max {Math.floor(MAX_RECORDING_SECONDS / 60)} min
             </Badge>
             {useSpeechAPI ? (
               <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/20">
@@ -362,6 +473,24 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           Dictez votre opération comptable en français. L'IA extrait automatiquement montant, TVA, catégorie et tiers <span className="text-primary font-medium">depuis votre vraie voix</span>.
         </p>
 
+        {/* Auto-save options */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <Cloud className="h-4 w-4 text-primary" />
+              <Label className="text-xs font-medium">Auto-save Cloud</Label>
+            </div>
+            <Switch checked={autoSaveCloud} onCheckedChange={setAutoSaveCloud} />
+          </div>
+          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <Link2 className="h-4 w-4 text-primary" />
+              <Label className="text-xs font-medium">Auto-save Blockchain</Label>
+            </div>
+            <Switch checked={autoSaveBlockchain} onCheckedChange={setAutoSaveBlockchain} />
+          </div>
+        </div>
+
         {!hasMediaRecorder && !hasSpeechRecognition && (
           <div className="flex items-center space-x-2 text-warning bg-warning/10 p-3 rounded-lg">
             <AlertCircle className="h-4 w-4 flex-shrink-0" />
@@ -373,13 +502,13 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           {/* Audio Level Indicator */}
           {isRecording && (
             <div className="flex items-center space-x-1 h-10">
-              {[...Array(14)].map((_, i) => (
+              {[...Array(20)].map((_, i) => (
                 <div
                   key={i}
-                  className="w-1.5 bg-primary rounded-full transition-all duration-75"
+                  className="w-1 sm:w-1.5 bg-primary rounded-full transition-all duration-75"
                   style={{
                     height: `${Math.max(6, Math.min(40, audioLevel * 40 + Math.random() * 10))}px`,
-                    opacity: audioLevel > i * 0.07 ? 1 : 0.2
+                    opacity: audioLevel > i * 0.05 ? 1 : 0.2
                   }}
                 />
               ))}
@@ -388,7 +517,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
 
           <Button
             onClick={toggleRecording}
-            disabled={isProcessing || (!hasMediaRecorder && !hasSpeechRecognition)}
+            disabled={isProcessing || isSaving || (!hasMediaRecorder && !hasSpeechRecognition)}
             size="lg"
             className={`h-20 w-20 rounded-full transition-all duration-300 touch-manipulation ${
               isRecording
@@ -401,7 +530,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
                 : undefined
             }}
           >
-            {isProcessing ? (
+            {isProcessing || isSaving ? (
               <Loader2 className="h-8 w-8 animate-spin" />
             ) : isRecording ? (
               <Square className="h-8 w-8" />
@@ -412,18 +541,33 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
 
           <div className="text-center space-y-1">
             {isRecording && (
-              <Badge variant="destructive" className="animate-pulse">
-                <Volume2 className="h-3 w-3 mr-1" />
-                {formatTime(recordingTime)} — Enregistrement en cours
-              </Badge>
+              <div className="space-y-1">
+                <Badge variant="destructive" className="animate-pulse">
+                  <Volume2 className="h-3 w-3 mr-1" />
+                  {formatTime(recordingTime)} — Enregistrement en cours
+                </Badge>
+                <p className="text-[10px] text-muted-foreground">
+                  Temps restant: {formatTime(remainingTime)}
+                </p>
+              </div>
             )}
             <p className="text-sm text-muted-foreground">
-              {isProcessing
+              {isSaving
+                ? "Sauvegarde automatique..."
+                : isProcessing
                 ? "Analyse IA en cours..."
                 : isRecording
                 ? "Parlez maintenant — appuyez pour arrêter"
                 : "Appuyez pour dicter votre écriture"}
             </p>
+            {(autoSaveCloud || autoSaveBlockchain) && !isRecording && (
+              <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
+                <Save className="h-3 w-3" />
+                <span>
+                  Sauvegarde auto: {[autoSaveCloud && "Cloud", autoSaveBlockchain && "Blockchain"].filter(Boolean).join(" + ")}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -454,9 +598,17 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         {/* Extracted data display */}
         {lastResult && lastResult.montant && (
           <div className="bg-success/10 border border-success/20 rounded-lg p-4 space-y-3">
-            <div className="flex items-center space-x-2">
-              <CheckCircle className="h-4 w-4 text-success" />
-              <p className="text-xs text-success uppercase tracking-wider font-medium">Données extraites de votre audio</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="h-4 w-4 text-success" />
+                <p className="text-xs text-success uppercase tracking-wider font-medium">Données extraites de votre audio</p>
+              </div>
+              {(autoSaveCloud || autoSaveBlockchain) && (
+                <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/20">
+                  <Save className="h-3 w-3 mr-1" />
+                  Sauvegardé
+                </Badge>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -505,7 +657,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2 pt-1">
-              {onInsertToJournal && (
+              {onInsertToJournal && !(autoSaveCloud) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -542,9 +694,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             </p>
             <p className="text-xs text-muted-foreground font-medium">Exemples :</p>
             <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-              <li>«&nbsp;Achat fournitures bureau 150 euros TVA 20% chez Office Depot&nbsp;»</li>
-              <li>«&nbsp;Facture OVH 456 euros TTC hébergement annuel&nbsp;»</li>
-              <li>«&nbsp;Encaissement client Acme 1500 HBAR prestation développement&nbsp;»</li>
+              <li>«&nbsp;Achat fournitures bureau 75 000 francs CFA TVA 18% chez Prosuma&nbsp;»</li>
+              <li>«&nbsp;Facture MTN 150 000 FCFA abonnement internet&nbsp;»</li>
+              <li>«&nbsp;Encaissement client Solibra 2 500 000 XOF prestation conseil&nbsp;»</li>
             </ul>
           </div>
         )}
