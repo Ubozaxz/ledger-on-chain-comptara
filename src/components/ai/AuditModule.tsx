@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   ShieldCheck, AlertTriangle, TrendingUp, TrendingDown, 
   Loader2, RefreshCw, CheckCircle, XCircle, Info,
   BarChart3, PieChart, Target, Lightbulb, FileText,
-  Percent, Calculator, AlertCircle
+  Percent, Calculator, AlertCircle, Maximize2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from "react-markdown";
@@ -41,6 +42,7 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
   const [healthScore, setHealthScore] = useState<number | null>(null);
   const [metrics, setMetrics] = useState<AuditMetric[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const calculateMetrics = (): AuditMetric[] => {
@@ -48,120 +50,104 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
     const totalPayments = payments.length;
     const entriesAmount = entries.reduce((sum, e) => sum + (parseFloat(e.montant) || 0), 0);
     const paymentsAmount = payments.reduce((sum, p) => sum + (parseFloat(p.montant) || 0), 0);
-    
-    // Calcul des débits et crédits
     const debits = entries.filter(e => e.debit && e.debit !== "").reduce((sum, e) => sum + (parseFloat(e.montant) || 0), 0);
     const credits = entries.filter(e => e.credit && e.credit !== "").reduce((sum, e) => sum + (parseFloat(e.montant) || 0), 0);
-    
-    // Écritures avec hash de transaction (validées on-chain)
     const verifiedEntries = entries.filter(e => e.tx_hash && e.tx_hash.length > 10).length;
     const verifiedPayments = payments.filter(p => p.tx_hash && p.tx_hash.length > 10).length;
     const verificationRate = totalEntries + totalPayments > 0 
-      ? ((verifiedEntries + verifiedPayments) / (totalEntries + totalPayments)) * 100 
-      : 0;
-
-    // Balance débit/crédit
+      ? ((verifiedEntries + verifiedPayments) / (totalEntries + totalPayments)) * 100 : 0;
     const balance = debits - credits;
     const isBalanced = Math.abs(balance) < 0.01;
-
-    // Catégorisation
     const categorizedEntries = entries.filter(e => e.category && e.category !== "").length;
     const categorizationRate = totalEntries > 0 ? (categorizedEntries / totalEntries) * 100 : 100;
-
-    // TVA tracking
     const entriesWithTVA = entries.filter(e => e.tva_rate !== null && e.tva_rate !== undefined).length;
     const tvaRate = totalEntries > 0 ? (entriesWithTVA / totalEntries) * 100 : 0;
     const totalTVA = entries.reduce((sum, e) => sum + (parseFloat(e.montant_tva) || 0), 0);
 
     return [
       {
-        label: "Vérification On-chain",
+        label: "On-chain",
         value: `${verificationRate.toFixed(0)}%`,
         status: verificationRate >= 80 ? "good" : verificationRate >= 50 ? "warning" : "critical",
         icon: verificationRate >= 80 ? CheckCircle : verificationRate >= 50 ? AlertTriangle : XCircle,
-        description: `${verifiedEntries + verifiedPayments} transactions vérifiées sur ${totalEntries + totalPayments}`
+        description: `${verifiedEntries + verifiedPayments}/${totalEntries + totalPayments} vérifiées`
       },
       {
-        label: "Balance Comptable",
-        value: isBalanced ? "Équilibré" : `${balance > 0 ? "+" : ""}${balance.toFixed(2)}`,
+        label: "Balance",
+        value: isBalanced ? "OK" : `${balance > 0 ? "+" : ""}${balance.toLocaleString('fr-FR', {maximumFractionDigits: 0})}`,
         status: isBalanced ? "good" : Math.abs(balance) < entriesAmount * 0.1 ? "warning" : "critical",
         icon: isBalanced ? CheckCircle : AlertTriangle,
-        description: isBalanced ? "Débits = Crédits" : "Écart détecté entre débits et crédits"
+        description: isBalanced ? "Débits = Crédits" : "Écart détecté"
       },
       {
-        label: "Volume Total",
-        value: `${(entriesAmount + paymentsAmount).toLocaleString()}`,
+        label: "Volume",
+        value: `${((entriesAmount + paymentsAmount) / 1000).toFixed(0)}k`,
         status: "info",
         icon: BarChart3,
-        description: `${totalEntries} écritures, ${totalPayments} paiements`
+        description: `${totalEntries} écr., ${totalPayments} paie.`
       },
       {
-        label: "Catégorisation",
+        label: "Catégories",
         value: `${categorizationRate.toFixed(0)}%`,
         status: categorizationRate >= 80 ? "good" : categorizationRate >= 50 ? "warning" : "critical",
         icon: categorizationRate >= 80 ? CheckCircle : Target,
-        description: `${categorizedEntries} écritures catégorisées sur ${totalEntries}`
+        description: `${categorizedEntries}/${totalEntries} classées`
       },
       {
-        label: "Suivi TVA",
+        label: "TVA",
         value: `${tvaRate.toFixed(0)}%`,
         status: tvaRate >= 70 ? "good" : tvaRate >= 40 ? "warning" : "info",
         icon: Percent,
-        description: `Total TVA: ${totalTVA.toFixed(2)} - ${entriesWithTVA} écritures avec TVA`
+        description: `TVA: ${totalTVA.toLocaleString('fr-FR', {maximumFractionDigits: 0})} FCFA`
       },
       {
-        label: "Moyenne Transaction",
-        value: `${(totalEntries + totalPayments > 0 ? (entriesAmount + paymentsAmount) / (totalEntries + totalPayments) : 0).toFixed(2)}`,
+        label: "Moy. Tx",
+        value: `${(totalEntries + totalPayments > 0 ? ((entriesAmount + paymentsAmount) / (totalEntries + totalPayments) / 1000) : 0).toFixed(0)}k`,
         status: "info",
         icon: Calculator,
-        description: "Montant moyen par transaction"
+        description: "FCFA par transaction"
       }
     ];
   };
 
   const generateRecommendations = (metrics: AuditMetric[]): Recommendation[] => {
     const recs: Recommendation[] = [];
-    
-    const verificationMetric = metrics.find(m => m.label === "Vérification On-chain");
+    const verificationMetric = metrics.find(m => m.label === "On-chain");
     if (verificationMetric && verificationMetric.status === "critical") {
       recs.push({
         type: "warning",
         title: "Faible taux de vérification blockchain",
-        description: "Moins de 50% de vos transactions sont ancrées on-chain. Activez l'ancrage blockchain pour plus de traçabilité.",
-        action: "Activer l'ancrage automatique"
+        description: "Moins de 50% de vos transactions sont ancrées on-chain. Activez l'ancrage blockchain.",
+        action: "Activer l'ancrage"
       });
     }
-    
-    const balanceMetric = metrics.find(m => m.label === "Balance Comptable");
+    const balanceMetric = metrics.find(m => m.label === "Balance");
     if (balanceMetric && balanceMetric.status !== "good") {
       recs.push({
         type: "critical",
-        title: "Déséquilibre comptable détecté",
+        title: "Déséquilibre comptable",
         description: "Vos débits et crédits ne sont pas équilibrés. Vérifiez vos écritures récentes.",
         action: "Vérifier les écritures"
       });
     }
-    
-    const tvaMetric = metrics.find(m => m.label === "Suivi TVA");
+    const tvaMetric = metrics.find(m => m.label === "TVA");
     if (tvaMetric && (tvaMetric.status === "warning" || tvaMetric.status === "info")) {
       recs.push({
         type: "info",
-        title: "Améliorer le suivi TVA",
-        description: "Certaines écritures n'ont pas de TVA renseignée. Complétez pour faciliter vos déclarations fiscales.",
-        action: "Configurer la TVA"
+        title: "Suivi TVA incomplet",
+        description: "Certaines écritures n'ont pas de TVA. Complétez pour vos déclarations fiscales.",
+        action: "Configurer TVA"
       });
     }
-
-    const catMetric = metrics.find(m => m.label === "Catégorisation");
+    const catMetric = metrics.find(m => m.label === "Catégories");
     if (catMetric && catMetric.status !== "good") {
       recs.push({
         type: "warning",
         title: "Catégorisation incomplète",
-        description: "Catégorisez vos écritures pour de meilleurs rapports et analyses.",
-        action: "Catégoriser les écritures"
+        description: "Catégorisez vos écritures pour de meilleurs rapports.",
+        action: "Catégoriser"
       });
     }
-
     if (entries.length >= 5 && recs.length === 0) {
       recs.push({
         type: "success",
@@ -169,17 +155,12 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
         description: "Votre comptabilité est bien tenue. Continuez ainsi!",
       });
     }
-
     return recs;
   };
 
   const analyzeLedger = async () => {
     if (entries.length === 0 && payments.length === 0) {
-      toast({
-        title: "Aucune donnée",
-        description: "Ajoutez des écritures comptables ou paiements avant de lancer l'audit.",
-        variant: "destructive",
-      });
+      toast({ title: "Aucune donnée", description: "Ajoutez des écritures avant de lancer l'audit.", variant: "destructive" });
       return;
     }
 
@@ -187,7 +168,6 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
     setAuditResult(null);
     setHealthScore(null);
 
-    // Calculer les métriques immédiatement
     const calculatedMetrics = calculateMetrics();
     setMetrics(calculatedMetrics);
     setRecommendations(generateRecommendations(calculatedMetrics));
@@ -195,28 +175,15 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
     try {
       const ledgerData = {
         entries: entries.map(e => ({
-          id: e.id,
-          date: e.date,
-          debit: e.debit,
-          credit: e.credit,
-          montant: e.montant,
-          description: e.description || e.libelle,
-          txHash: e.tx_hash,
-          category: e.category,
-          tvaRate: e.tva_rate,
-          montantHT: e.montant_ht,
-          montantTVA: e.montant_tva,
+          id: e.id, date: e.date, debit: e.debit, credit: e.credit,
+          montant: e.montant, description: e.description || e.libelle,
+          txHash: e.tx_hash, category: e.category,
+          tvaRate: e.tva_rate, montantHT: e.montant_ht, montantTVA: e.montant_tva,
         })),
         payments: payments.map(p => ({
-          id: p.id,
-          date: p.created_at,
-          type: p.type,
-          montant: p.montant,
-          devise: p.devise,
-          destinataire: p.destinataire,
-          objet: p.objet,
-          txHash: p.tx_hash,
-          status: p.status,
+          id: p.id, date: p.created_at, type: p.type, montant: p.montant,
+          devise: p.devise, destinataire: p.destinataire, objet: p.objet,
+          txHash: p.tx_hash, status: p.status,
         })),
         summary: {
           totalEntries: entries.length,
@@ -229,22 +196,14 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
 
       const headers = await buildJsonHeaders();
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-accountant`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          action: "audit",
-          ledgerData,
-        }),
+        method: "POST", headers,
+        body: JSON.stringify({ action: "audit", ledgerData }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        if (response.status === 429) {
-          throw new Error("Limite de requêtes atteinte. Réessayez plus tard.");
-        }
-        if (response.status === 402) {
-          throw new Error("Crédits IA insuffisants.");
-        }
+        if (response.status === 429) throw new Error("Limite de requêtes atteinte.");
+        if (response.status === 402) throw new Error("Crédits IA insuffisants.");
         throw new Error(errorData.error || "Échec de l'audit");
       }
 
@@ -256,10 +215,8 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n');
-          
           for (const line of lines) {
             if (line.startsWith('data: ') && line !== 'data: [DONE]') {
               try {
@@ -269,9 +226,7 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
                   fullResponse += content;
                   setAuditResult(fullResponse);
                 }
-              } catch (e) {
-                // Skip invalid JSON
-              }
+              } catch (e) {}
             }
           }
         }
@@ -280,18 +235,10 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
       const score = calculateHealthScore(fullResponse, entries, payments);
       setHealthScore(score);
       localStorage.setItem("lastAuditDate", new Date().toISOString());
-
-      toast({
-        title: "Audit terminé",
-        description: `Score de santé financière: ${score}%`,
-      });
+      toast({ title: "Audit terminé", description: `Score: ${score}%` });
     } catch (error: any) {
       console.error("Audit error:", error);
-      toast({
-        title: "Erreur d'audit",
-        description: error.message || "Impossible de lancer l'audit",
-        variant: "destructive",
-      });
+      toast({ title: "Erreur d'audit", description: error.message, variant: "destructive" });
     } finally {
       setIsAnalyzing(false);
     }
@@ -299,56 +246,24 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
 
   const calculateHealthScore = (analysis: string, entries: any[], payments: any[]): number => {
     let score = 100;
-    const lowerAnalysis = analysis.toLowerCase();
-    
-    // Pénalités pour problèmes détectés
-    const criticalKeywords = ['anomalie majeure', 'erreur critique', 'fraude', 'double saisie', 'incohérence grave'];
-    const warningKeywords = ['incohérence', 'attention', 'risque', 'vérifier', 'manquant'];
-    const positiveKeywords = ['correct', 'cohérent', 'équilibré', 'excellent', 'conforme', 'parfait'];
-
-    criticalKeywords.forEach(keyword => {
-      if (lowerAnalysis.includes(keyword)) score -= 15;
-    });
-    
-    warningKeywords.forEach(keyword => {
-      if (lowerAnalysis.includes(keyword)) score -= 5;
-    });
-
-    positiveKeywords.forEach(keyword => {
-      if (lowerAnalysis.includes(keyword)) score += 3;
-    });
-
-    // Bonus pour volume de données
+    const lower = analysis.toLowerCase();
+    ['anomalie majeure', 'erreur critique', 'fraude', 'double saisie', 'incohérence grave'].forEach(k => { if (lower.includes(k)) score -= 15; });
+    ['incohérence', 'attention', 'risque', 'vérifier', 'manquant'].forEach(k => { if (lower.includes(k)) score -= 5; });
+    ['correct', 'cohérent', 'équilibré', 'excellent', 'conforme'].forEach(k => { if (lower.includes(k)) score += 3; });
     if (entries.length >= 10) score += 5;
-    if (payments.length >= 5) score += 3;
-    
-    // Pénalité si peu de données
     if (entries.length < 3) score -= 10;
-
-    // Vérification on-chain
     const verified = entries.filter(e => e.tx_hash).length + payments.filter(p => p.tx_hash).length;
     const total = entries.length + payments.length;
     if (total > 0 && verified / total < 0.5) score -= 10;
-
-    // Bonus TVA tracking
-    const withTVA = entries.filter(e => e.tva_rate !== null).length;
-    if (entries.length > 0 && withTVA / entries.length > 0.7) score += 5;
-
     return Math.max(0, Math.min(100, score));
   };
 
-  const getHealthColor = (score: number) => {
-    if (score >= 80) return "text-success";
-    if (score >= 60) return "text-warning";
-    return "text-destructive";
-  };
-
+  const getHealthColor = (score: number) => score >= 80 ? "text-success" : score >= 60 ? "text-warning" : "text-destructive";
   const getHealthBadge = (score: number) => {
-    if (score >= 80) return { text: "Excellent", variant: "default" as const, bg: "bg-success/10 text-success border-success/20" };
-    if (score >= 60) return { text: "Attention", variant: "secondary" as const, bg: "bg-warning/10 text-warning border-warning/20" };
-    return { text: "Critique", variant: "destructive" as const, bg: "bg-destructive/10 text-destructive border-destructive/20" };
+    if (score >= 80) return { text: "Excellent", bg: "bg-success/10 text-success border-success/20" };
+    if (score >= 60) return { text: "Attention", bg: "bg-warning/10 text-warning border-warning/20" };
+    return { text: "Critique", bg: "bg-destructive/10 text-destructive border-destructive/20" };
   };
-
   const getMetricStatusColor = (status: string) => {
     switch (status) {
       case "good": return "text-success bg-success/10";
@@ -357,151 +272,182 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
       default: return "text-primary bg-primary/10";
     }
   };
-
   const getRecIcon = (type: string) => {
     switch (type) {
-      case "success": return <CheckCircle className="h-4 w-4 text-success" />;
-      case "warning": return <AlertTriangle className="h-4 w-4 text-warning" />;
-      case "critical": return <AlertCircle className="h-4 w-4 text-destructive" />;
-      default: return <Lightbulb className="h-4 w-4 text-primary" />;
+      case "success": return <CheckCircle className="h-4 w-4 text-success flex-shrink-0" />;
+      case "warning": return <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />;
+      case "critical": return <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />;
+      default: return <Lightbulb className="h-4 w-4 text-primary flex-shrink-0" />;
     }
   };
 
   const displayedMetrics = metrics.length > 0 ? metrics : calculateMetrics();
   const displayedRecs = recommendations.length > 0 ? recommendations : generateRecommendations(displayedMetrics);
 
+  const ReportContent = ({ maxHeight }: { maxHeight?: string }) => (
+    <div className={maxHeight ? `max-h-[${maxHeight}] overflow-y-auto` : ""}>
+      {auditResult ? (
+        <div className="prose prose-sm dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed
+          prose-headings:text-foreground prose-h2:text-base prose-h3:text-sm prose-h2:mt-4 prose-h3:mt-3
+          prose-table:text-xs prose-td:px-2 prose-td:py-1 prose-th:px-2 prose-th:py-1
+          prose-ul:my-1 prose-li:my-0.5 prose-p:my-1.5">
+          <ReactMarkdown>{auditResult}</ReactMarkdown>
+        </div>
+      ) : (
+        <div className="text-center py-8 text-muted-foreground">
+          <ShieldCheck className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium text-sm">Prêt pour l'audit</p>
+          <p className="text-xs mt-1">
+            L'IA analysera {entries.length} écritures et {payments.length} paiements.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <Card className="card-modern">
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-2 p-3 sm:p-6">
         <CardTitle className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center space-x-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            <span>Audit IA Comptable</span>
+            <span className="text-sm sm:text-base">Audit IA</span>
           </div>
-          <Button
-            onClick={analyzeLedger}
-            disabled={isAnalyzing}
-            size="sm"
-            className="bg-gradient-primary hover:opacity-90"
-          >
+          <Button onClick={analyzeLedger} disabled={isAnalyzing} size="sm"
+            className="bg-gradient-primary hover:opacity-90 h-8 text-xs">
             {isAnalyzing ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Analyse...
-              </>
+              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Analyse...</>
             ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Lancer l'audit
-              </>
+              <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Lancer</>
             )}
           </Button>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 p-3 sm:p-6 pt-0">
         <Tabs defaultValue="metrics" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="metrics" className="text-xs">
-              <PieChart className="h-3 w-3 mr-1" />
-              Métriques
+          <TabsList className="grid w-full grid-cols-3 mb-3 h-8">
+            <TabsTrigger value="metrics" className="text-[10px] sm:text-xs h-7">
+              <PieChart className="h-3 w-3 mr-1" />Métriques
             </TabsTrigger>
-            <TabsTrigger value="recommendations" className="text-xs">
-              <Lightbulb className="h-3 w-3 mr-1" />
-              Conseils
+            <TabsTrigger value="recommendations" className="text-[10px] sm:text-xs h-7">
+              <Lightbulb className="h-3 w-3 mr-1" />Conseils
             </TabsTrigger>
-            <TabsTrigger value="report" className="text-xs">
-              <FileText className="h-3 w-3 mr-1" />
-              Rapport
+            <TabsTrigger value="report" className="text-[10px] sm:text-xs h-7">
+              <FileText className="h-3 w-3 mr-1" />Rapport
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="metrics" className="space-y-4">
-            {/* Métriques rapides */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <TabsContent value="metrics" className="space-y-3">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
               {displayedMetrics.map((metric, idx) => (
-                <div key={idx} className={`rounded-lg p-3 text-center space-y-1 ${getMetricStatusColor(metric.status)}`}>
-                  <metric.icon className="h-5 w-5 mx-auto" />
-                  <p className="text-lg font-bold">{metric.value}</p>
-                  <p className="text-xs opacity-80">{metric.label}</p>
+                <div key={idx} className={`rounded-lg p-2 sm:p-3 text-center space-y-0.5 ${getMetricStatusColor(metric.status)}`}>
+                  <metric.icon className="h-4 w-4 mx-auto" />
+                  <p className="text-sm sm:text-lg font-bold leading-tight">{metric.value}</p>
+                  <p className="text-[9px] sm:text-xs opacity-80 leading-tight">{metric.label}</p>
                   {metric.description && (
-                    <p className="text-[10px] opacity-60">{metric.description}</p>
+                    <p className="text-[8px] sm:text-[10px] opacity-60 leading-tight hidden sm:block">{metric.description}</p>
                   )}
                 </div>
               ))}
             </div>
 
-            {/* Score de santé */}
             {healthScore !== null && (
-              <div className="bg-card border rounded-lg p-4 space-y-3">
+              <div className="bg-card border rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     {healthScore >= 60 ? (
-                      <TrendingUp className={`h-5 w-5 ${getHealthColor(healthScore)}`} />
+                      <TrendingUp className={`h-4 w-4 ${getHealthColor(healthScore)}`} />
                     ) : (
-                      <TrendingDown className={`h-5 w-5 ${getHealthColor(healthScore)}`} />
+                      <TrendingDown className={`h-4 w-4 ${getHealthColor(healthScore)}`} />
                     )}
-                    <span className="font-medium">Score de Santé Financière</span>
+                    <span className="font-medium text-xs sm:text-sm">Santé Financière</span>
                   </div>
-                  <Badge className={getHealthBadge(healthScore).bg}>
+                  <Badge className={getHealthBadge(healthScore).bg + " text-[10px]"}>
                     {getHealthBadge(healthScore).text}
                   </Badge>
                 </div>
-                <Progress value={healthScore} className="h-3" />
-                <p className={`text-center text-3xl font-bold ${getHealthColor(healthScore)}`}>
+                <Progress value={healthScore} className="h-2" />
+                <p className={`text-center text-2xl font-bold ${getHealthColor(healthScore)}`}>
                   {healthScore}%
                 </p>
               </div>
             )}
           </TabsContent>
 
-          <TabsContent value="recommendations" className="space-y-3">
-            {displayedRecs.map((rec, idx) => (
-              <div 
-                key={idx} 
-                className={`rounded-lg p-3 border ${
-                  rec.type === 'success' ? 'bg-success/5 border-success/20' :
-                  rec.type === 'warning' ? 'bg-warning/5 border-warning/20' :
-                  rec.type === 'critical' ? 'bg-destructive/5 border-destructive/20' :
-                  'bg-primary/5 border-primary/20'
-                }`}
-              >
-                <div className="flex items-start space-x-3">
-                  {getRecIcon(rec.type)}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm">{rec.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{rec.description}</p>
-                    {rec.action && (
-                      <Button variant="link" size="sm" className="h-6 p-0 mt-2 text-xs">
-                        {rec.action} →
-                      </Button>
-                    )}
+          <TabsContent value="recommendations" className="space-y-2">
+            <ScrollArea className="max-h-[400px]">
+              <div className="space-y-2 pr-2">
+                {displayedRecs.map((rec, idx) => (
+                  <div key={idx} className={`rounded-lg p-2.5 sm:p-3 border ${
+                    rec.type === 'success' ? 'bg-success/5 border-success/20' :
+                    rec.type === 'warning' ? 'bg-warning/5 border-warning/20' :
+                    rec.type === 'critical' ? 'bg-destructive/5 border-destructive/20' :
+                    'bg-primary/5 border-primary/20'
+                  }`}>
+                    <div className="flex items-start space-x-2.5">
+                      {getRecIcon(rec.type)}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-xs sm:text-sm">{rec.title}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{rec.description}</p>
+                        {rec.action && (
+                          <Button variant="link" size="sm" className="h-5 p-0 mt-1 text-[10px] sm:text-xs">
+                            {rec.action} →
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
+                {displayedRecs.length === 0 && (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Lightbulb className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs">Lancez un audit pour obtenir des conseils</p>
+                  </div>
+                )}
               </div>
-            ))}
-            {displayedRecs.length === 0 && (
-              <div className="text-center py-6 text-muted-foreground">
-                <Lightbulb className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Lancez un audit pour obtenir des conseils personnalisés</p>
-              </div>
-            )}
+            </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="report" className="space-y-3">
-            {auditResult ? (
-              <ScrollArea className="h-64 rounded-lg border bg-muted/30 p-4">
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown>{auditResult}</ReactMarkdown>
-                </div>
-              </ScrollArea>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <ShieldCheck className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                <p className="font-medium">Prêt pour l'audit</p>
-                <p className="text-xs mt-1 max-w-xs mx-auto">
-                  L'IA analysera vos {entries.length} écritures et {payments.length} paiements pour détecter anomalies et optimisations.
-                </p>
-              </div>
+          <TabsContent value="report" className="space-y-2">
+            {/* Inline preview */}
+            <ScrollArea className="h-[250px] sm:h-[350px] rounded-lg border bg-muted/20 p-3">
+              <ReportContent />
+            </ScrollArea>
+            
+            {/* Full-screen dialog for reading */}
+            {auditResult && (
+              <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full h-9 text-xs">
+                    <Maximize2 className="h-3.5 w-3.5 mr-1.5" />
+                    Lire le rapport complet
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] flex flex-col p-0">
+                  <DialogHeader className="p-4 pb-2 border-b">
+                    <DialogTitle className="flex items-center space-x-2 text-sm sm:text-base">
+                      <ShieldCheck className="h-5 w-5 text-primary" />
+                      <span>Rapport d'Audit Comptable</span>
+                      {healthScore !== null && (
+                        <Badge className={getHealthBadge(healthScore).bg + " text-xs ml-2"}>
+                          {healthScore}%
+                        </Badge>
+                      )}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <ScrollArea className="flex-1 p-4 overflow-y-auto">
+                    <div className="prose prose-sm dark:prose-invert max-w-none
+                      prose-headings:text-foreground prose-h2:text-base sm:prose-h2:text-lg prose-h3:text-sm sm:prose-h3:text-base
+                      prose-h2:mt-5 prose-h3:mt-3 prose-h2:mb-2 prose-h3:mb-1
+                      prose-table:text-xs sm:prose-table:text-sm prose-td:px-2 prose-td:py-1 prose-th:px-2 prose-th:py-1
+                      prose-table:border prose-th:border prose-td:border prose-th:bg-muted/50
+                      prose-ul:my-1.5 prose-li:my-0.5 prose-p:my-2 prose-p:text-xs sm:prose-p:text-sm
+                      prose-strong:text-foreground">
+                      <ReactMarkdown>{auditResult}</ReactMarkdown>
+                    </div>
+                  </ScrollArea>
+                </DialogContent>
+              </Dialog>
             )}
           </TabsContent>
         </Tabs>

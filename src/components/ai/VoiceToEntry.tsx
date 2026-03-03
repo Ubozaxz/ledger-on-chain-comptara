@@ -32,7 +32,6 @@ const hasMediaRecorder = typeof MediaRecorder !== "undefined";
 const hasSpeechRecognition = typeof window !== "undefined" && 
   (('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window));
 
-// Max recording: 5 minutes
 const MAX_RECORDING_SECONDS = 300;
 
 export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPayment }: VoiceToEntryProps) => {
@@ -49,32 +48,48 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const [isSaving, setIsSaving] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
+  const isListeningRef = useRef(false);
   const transcriptRef = useRef<string>("");
-  const maxTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const finalPartsRef = useRef<string[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch {}
-      }
+      cleanup();
     };
   }, []);
+
+  const cleanup = () => {
+    isListeningRef.current = false;
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch {}
+      recognitionRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(t => t.stop());
+      audioStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch {}
+      audioContextRef.current = null;
+    }
+  };
 
   const startTimer = () => {
     setRecordingTime(0);
     timerRef.current = setInterval(() => {
       setRecordingTime(prev => {
         if (prev >= MAX_RECORDING_SECONDS - 1) {
-          stopRecordingAll();
+          stopRecording();
           return prev;
         }
         return prev + 1;
@@ -87,17 +102,11 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    if (maxTimerRef.current) {
-      clearTimeout(maxTimerRef.current);
-      maxTimerRef.current = null;
-    }
   };
 
-  // Auto-save extracted entry
   const autoSaveEntry = async (entry: ExtractedEntry) => {
     if (!entry.montant) return;
     setIsSaving(true);
-
     try {
       if (autoSaveCloud && onInsertToJournal) {
         onInsertToJournal(entry);
@@ -106,9 +115,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           description: `${entry.montant} ${entry.devise || 'XOF'} — enregistré dans le Cloud`,
         });
       }
-
       if (autoSaveBlockchain && onInsertToJournal) {
-        // The blockchain anchoring happens within the journal entry handler
         toast({
           title: "⛓️ Ancrage blockchain demandé",
           description: "L'écriture sera ancrée via votre wallet",
@@ -121,33 +128,62 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
-  // ---- Web Speech API (real-time transcription) ----
+  const startAudioVisualizer = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+      });
+      audioStreamRef.current = stream;
+      
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const updateLevel = () => {
+        if (!analyserRef.current || !isListeningRef.current) return;
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        setAudioLevel(average / 255);
+        animationRef.current = requestAnimationFrame(updateLevel);
+      };
+      updateLevel();
+    } catch (err) {
+      console.error("Audio visualizer error:", err);
+    }
+  };
+
+  // ---- Web Speech API with auto-restart ----
   const startSpeechRecognition = useCallback(async () => {
     try {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        setUseSpeechAPI(false);
+        await startMediaRecorder();
+        return;
+      }
+
       const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
       transcriptRef.current = "";
+      finalPartsRef.current = [];
+      isListeningRef.current = true;
 
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = "fr-FR";
       recognition.maxAlternatives = 3;
 
-      recognition.onstart = () => {
-        setIsRecording(true);
-        setTranscript("");
-        setLiveTranscript("");
-        setLastResult(null);
-        startTimer();
-      };
-
       recognition.onresult = (event: any) => {
         let interim = "";
-        let final = "";
-        for (let i = 0; i < event.results.length; i++) {
+        let sessionFinal = "";
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          // Pick the best alternative
           let bestText = result[0].transcript;
           let bestConfidence = result[0].confidence || 0;
           for (let a = 1; a < result.length; a++) {
@@ -157,15 +193,19 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             }
           }
           if (result.isFinal) {
-            final += bestText + " ";
+            sessionFinal += bestText + " ";
           } else {
             interim += bestText;
           }
         }
-        if (final) {
-          transcriptRef.current = final;
+        
+        if (sessionFinal.trim()) {
+          finalPartsRef.current.push(sessionFinal.trim());
+          transcriptRef.current = finalPartsRef.current.join(" ");
         }
-        setLiveTranscript((final + interim).trim());
+        
+        const fullText = transcriptRef.current + (interim ? " " + interim : "");
+        setLiveTranscript(fullText.trim());
       };
 
       recognition.onerror = (event: any) => {
@@ -176,57 +216,58 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             description: "Autorisez l'accès au microphone dans les paramètres du navigateur",
             variant: "destructive",
           });
-          stopRecordingAll();
+          stopRecording();
         } else if (event.error === "no-speech") {
-          // Don't stop — just wait for speech
-          toast({ title: "En attente de parole...", description: "Parlez plus près du microphone" });
+          // Don't stop — just wait. onend will restart.
         } else if (event.error === "aborted") {
           // Normal stop
-        } else {
-          stopRecordingAll();
         }
+        // For other errors, onend will handle restart
       };
 
-      recognition.onend = async () => {
-        stopTimer();
-        setIsRecording(false);
-        setAudioLevel(0);
-        const finalText = transcriptRef.current.trim();
-        if (finalText) {
-          setTranscript(finalText);
-          setLiveTranscript("");
-          await extractFromTranscript(finalText);
-        } else {
-          toast({ title: "Aucune parole détectée", description: "Réessayez en parlant clairement", variant: "destructive" });
-        }
-      };
-
-      // Start audio context for visual feedback
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(stream);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        analyserRef.current = analyser;
-
-        const updateLevel = () => {
-          if (analyserRef.current) {
-            const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-            analyserRef.current.getByteFrequencyData(dataArray);
-            const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-            setAudioLevel(average / 255);
+      recognition.onend = () => {
+        // KEY FIX: Auto-restart if user is still recording
+        if (isListeningRef.current) {
+          try {
+            recognition.start();
+          } catch (e) {
+            console.error("Failed to restart recognition:", e);
+            // Small delay then retry
+            setTimeout(() => {
+              if (isListeningRef.current) {
+                try { recognition.start(); } catch {}
+              }
+            }, 300);
           }
-          animationRef.current = requestAnimationFrame(updateLevel);
-        };
-        updateLevel();
+        } else {
+          // User stopped — process the transcript
+          const finalText = transcriptRef.current.trim();
+          setIsRecording(false);
+          setAudioLevel(0);
+          stopTimer();
+          
+          if (finalText) {
+            setTranscript(finalText);
+            setLiveTranscript("");
+            extractFromTranscript(finalText);
+          } else {
+            toast({ title: "Aucune parole détectée", description: "Réessayez en parlant clairement", variant: "destructive" });
+          }
+        }
+      };
 
-        // Store stream ref for cleanup
-        mediaRecorderRef.current = { stop: () => { stream.getTracks().forEach(t => t.stop()); audioContext.close(); } } as any;
-      } catch {}
-
+      // Start audio visualizer first
+      await startAudioVisualizer();
+      
+      // Then start recognition (from user gesture context)
       recognition.start();
+      setIsRecording(true);
+      setTranscript("");
+      setLiveTranscript("");
+      setLastResult(null);
+      startTimer();
+      
+      toast({ title: "🎙️ Enregistrement démarré", description: "Parlez maintenant..." });
     } catch (err: any) {
       console.error("Speech recognition start error:", err);
       setUseSpeechAPI(false);
@@ -238,14 +279,12 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const startMediaRecorder = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 44100,
-        }
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 44100 }
       });
+      audioStreamRef.current = stream;
+      
       const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
@@ -253,12 +292,11 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       analyserRef.current = analyser;
 
       const updateLevel = () => {
-        if (analyserRef.current) {
-          const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-          analyserRef.current.getByteFrequencyData(dataArray);
-          const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-          setAudioLevel(average / 255);
-        }
+        if (!analyserRef.current) return;
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        setAudioLevel(average / 255);
         animationRef.current = requestAnimationFrame(updateLevel);
       };
 
@@ -277,7 +315,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
-        audioContext.close();
+        try { audioContext.close(); } catch {}
         if (animationRef.current) {
           cancelAnimationFrame(animationRef.current);
           animationRef.current = null;
@@ -291,7 +329,8 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         setIsProcessing(false);
       };
 
-      mediaRecorder.start(1000); // Collect data every second
+      mediaRecorder.start(1000);
+      isListeningRef.current = true;
       setIsRecording(true);
       setTranscript("");
       setLastResult(null);
@@ -307,26 +346,38 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
-  const stopRecordingAll = () => {
+  const stopRecording = () => {
+    isListeningRef.current = false;
     stopTimer();
-    setIsRecording(false);
+    
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
+      // onend handler will process the transcript
     }
+    
     if (mediaRecorderRef.current) {
       try {
-        if ('state' in mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        if (mediaRecorderRef.current.state !== "inactive") {
           mediaRecorderRef.current.stop();
-        } else if (!('state' in mediaRecorderRef.current)) {
-          // Audio-only cleanup ref
-          (mediaRecorderRef.current as any).stop?.();
         }
       } catch {}
     }
+    
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
+    
+    // Clean up audio stream
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(t => t.stop());
+      audioStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch {}
+      audioContextRef.current = null;
+    }
+    
     setAudioLevel(0);
   };
 
@@ -336,11 +387,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       const headers = await buildJsonHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-transcribe`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ transcript: text }),
-        }
+        { method: "POST", headers, body: JSON.stringify({ transcript: text }) }
       );
 
       if (!response.ok) {
@@ -369,8 +416,6 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           title: "✅ Données extraites",
           description: `${entry.description || "Écriture"} — ${entry.montant} ${entry.devise}`,
         });
-
-        // Auto-save if enabled
         if (autoSaveCloud || autoSaveBlockchain) {
           await autoSaveEntry(entry);
         }
@@ -395,7 +440,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
 
   const toggleRecording = async () => {
     if (isRecording) {
-      stopRecordingAll();
+      stopRecording();
     } else {
       if (useSpeechAPI) {
         await startSpeechRecognition();
@@ -442,50 +487,41 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
 
   return (
     <Card className="card-modern">
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-3 p-3 sm:p-6">
         <CardTitle className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center space-x-2">
             <Mic className="h-5 w-5 text-primary" />
-            <span className="text-base">Voice-to-Entry</span>
+            <span className="text-sm sm:text-base">Voice-to-Entry</span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge variant="outline" className="text-[10px] sm:text-xs bg-primary/10 text-primary border-primary/20">
               <Wand2 className="h-3 w-3 mr-1" />
-              IA Réelle
+              IA
             </Badge>
-            <Badge variant="outline" className="text-xs bg-accent/10 text-accent-foreground border-accent/20">
-              Max {Math.floor(MAX_RECORDING_SECONDS / 60)} min
+            <Badge variant="outline" className="text-[10px] sm:text-xs bg-accent/10 text-accent-foreground border-accent/20">
+              {Math.floor(MAX_RECORDING_SECONDS / 60)}min
             </Badge>
-            {useSpeechAPI ? (
-              <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/20">
-                Transcription Live
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/20">
-                Mode basique
-              </Badge>
-            )}
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Dictez votre opération comptable en français. L'IA extrait automatiquement montant, TVA, catégorie et tiers <span className="text-primary font-medium">depuis votre vraie voix</span>.
+      <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-6 pt-0">
+        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+          Dictez votre opération en français. L'IA extrait montant, TVA, catégorie et tiers automatiquement.
         </p>
 
         {/* Auto-save options */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-            <div className="flex items-center space-x-2">
-              <Cloud className="h-4 w-4 text-primary" />
-              <Label className="text-xs font-medium">Auto-save Cloud</Label>
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          <div className="flex items-center justify-between p-2 sm:p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center space-x-1.5">
+              <Cloud className="h-3.5 w-3.5 text-primary" />
+              <Label className="text-[10px] sm:text-xs font-medium">Cloud</Label>
             </div>
             <Switch checked={autoSaveCloud} onCheckedChange={setAutoSaveCloud} />
           </div>
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-            <div className="flex items-center space-x-2">
-              <Link2 className="h-4 w-4 text-primary" />
-              <Label className="text-xs font-medium">Auto-save Blockchain</Label>
+          <div className="flex items-center justify-between p-2 sm:p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center space-x-1.5">
+              <Link2 className="h-3.5 w-3.5 text-primary" />
+              <Label className="text-[10px] sm:text-xs font-medium">Chain</Label>
             </div>
             <Switch checked={autoSaveBlockchain} onCheckedChange={setAutoSaveBlockchain} />
           </div>
@@ -494,21 +530,21 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         {!hasMediaRecorder && !hasSpeechRecognition && (
           <div className="flex items-center space-x-2 text-warning bg-warning/10 p-3 rounded-lg">
             <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span className="text-sm">Enregistrement audio non supporté. Utilisez Chrome ou Safari sur iOS.</span>
+            <span className="text-xs">Enregistrement non supporté. Utilisez Chrome ou Safari.</span>
           </div>
         )}
 
-        <div className="flex flex-col items-center space-y-4">
+        <div className="flex flex-col items-center space-y-3">
           {/* Audio Level Indicator */}
           {isRecording && (
-            <div className="flex items-center space-x-1 h-10">
-              {[...Array(20)].map((_, i) => (
+            <div className="flex items-center space-x-0.5 h-8">
+              {[...Array(16)].map((_, i) => (
                 <div
                   key={i}
-                  className="w-1 sm:w-1.5 bg-primary rounded-full transition-all duration-75"
+                  className="w-1 bg-primary rounded-full transition-all duration-75"
                   style={{
-                    height: `${Math.max(6, Math.min(40, audioLevel * 40 + Math.random() * 10))}px`,
-                    opacity: audioLevel > i * 0.05 ? 1 : 0.2
+                    height: `${Math.max(4, Math.min(32, audioLevel * 32 + Math.random() * 8))}px`,
+                    opacity: audioLevel > i * 0.06 ? 1 : 0.2
                   }}
                 />
               ))}
@@ -519,7 +555,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             onClick={toggleRecording}
             disabled={isProcessing || isSaving || (!hasMediaRecorder && !hasSpeechRecognition)}
             size="lg"
-            className={`h-20 w-20 rounded-full transition-all duration-300 touch-manipulation ${
+            className={`h-16 w-16 sm:h-20 sm:w-20 rounded-full transition-all duration-300 touch-manipulation ${
               isRecording
                 ? "bg-destructive hover:bg-destructive/90 scale-110 animate-pulse"
                 : "bg-gradient-primary hover:opacity-90"
@@ -531,52 +567,38 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             }}
           >
             {isProcessing || isSaving ? (
-              <Loader2 className="h-8 w-8 animate-spin" />
+              <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin" />
             ) : isRecording ? (
-              <Square className="h-8 w-8" />
+              <Square className="h-6 w-6 sm:h-8 sm:w-8" />
             ) : (
-              <Mic className="h-8 w-8" />
+              <Mic className="h-6 w-6 sm:h-8 sm:w-8" />
             )}
           </Button>
 
           <div className="text-center space-y-1">
             {isRecording && (
-              <div className="space-y-1">
-                <Badge variant="destructive" className="animate-pulse">
+              <div className="space-y-0.5">
+                <Badge variant="destructive" className="animate-pulse text-xs">
                   <Volume2 className="h-3 w-3 mr-1" />
-                  {formatTime(recordingTime)} — Enregistrement en cours
+                  {formatTime(recordingTime)}
                 </Badge>
                 <p className="text-[10px] text-muted-foreground">
-                  Temps restant: {formatTime(remainingTime)}
+                  Restant: {formatTime(remainingTime)}
                 </p>
               </div>
             )}
-            <p className="text-sm text-muted-foreground">
-              {isSaving
-                ? "Sauvegarde automatique..."
-                : isProcessing
-                ? "Analyse IA en cours..."
-                : isRecording
-                ? "Parlez maintenant — appuyez pour arrêter"
-                : "Appuyez pour dicter votre écriture"}
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              {isSaving ? "Sauvegarde..." : isProcessing ? "Analyse IA..." : isRecording ? "Parlez — appuyez pour arrêter" : "Appuyez pour dicter"}
             </p>
-            {(autoSaveCloud || autoSaveBlockchain) && !isRecording && (
-              <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
-                <Save className="h-3 w-3" />
-                <span>
-                  Sauvegarde auto: {[autoSaveCloud && "Cloud", autoSaveBlockchain && "Blockchain"].filter(Boolean).join(" + ")}
-                </span>
-              </div>
-            )}
           </div>
         </div>
 
         {/* Live + final transcript */}
         {displayTranscript && (
-          <div className={`rounded-lg p-4 space-y-2 ${liveTranscript && isRecording ? 'bg-primary/5 border border-primary/20' : 'bg-muted/50'}`}>
+          <div className={`rounded-lg p-3 space-y-2 ${liveTranscript && isRecording ? 'bg-primary/5 border border-primary/20' : 'bg-muted/50'}`}>
             <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-                {isRecording ? "🔴 Transcription en direct" : "Transcription"}
+              <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider font-medium">
+                {isRecording ? "🔴 En direct" : "Transcription"}
               </p>
               {!isRecording && (
                 <div className="flex items-center gap-1">
@@ -591,91 +613,83 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
                 </div>
               )}
             </div>
-            <p className="text-sm leading-relaxed">{displayTranscript}</p>
+            <p className="text-xs sm:text-sm leading-relaxed">{displayTranscript}</p>
           </div>
         )}
 
         {/* Extracted data display */}
         {lastResult && lastResult.montant && (
-          <div className="bg-success/10 border border-success/20 rounded-lg p-4 space-y-3">
+          <div className="bg-success/10 border border-success/20 rounded-lg p-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <CheckCircle className="h-4 w-4 text-success" />
-                <p className="text-xs text-success uppercase tracking-wider font-medium">Données extraites de votre audio</p>
+                <p className="text-[10px] sm:text-xs text-success uppercase tracking-wider font-medium">Données extraites</p>
               </div>
               {(autoSaveCloud || autoSaveBlockchain) && (
-                <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/20">
+                <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/20">
                   <Save className="h-3 w-3 mr-1" />
-                  Sauvegardé
+                  OK
                 </Badge>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div className="bg-background/50 rounded-lg p-3">
-                <span className="text-xs text-muted-foreground block mb-1">Montant TTC</span>
-                <span className="font-bold text-lg">{lastResult.montant} {lastResult.devise}</span>
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-sm">
+              <div className="bg-background/50 rounded-lg p-2 sm:p-3">
+                <span className="text-[10px] text-muted-foreground block mb-0.5">Montant TTC</span>
+                <span className="font-bold text-base sm:text-lg">{lastResult.montant?.toLocaleString()} {lastResult.devise}</span>
               </div>
               {lastResult.montantHT && (
-                <div className="bg-background/50 rounded-lg p-3">
-                  <span className="text-xs text-muted-foreground block mb-1">Montant HT</span>
-                  <span className="font-semibold">{lastResult.montantHT} {lastResult.devise}</span>
+                <div className="bg-background/50 rounded-lg p-2 sm:p-3">
+                  <span className="text-[10px] text-muted-foreground block mb-0.5">HT</span>
+                  <span className="font-semibold text-sm">{lastResult.montantHT?.toLocaleString()} {lastResult.devise}</span>
                 </div>
               )}
-              {lastResult.tvaRate !== undefined && lastResult.tvaRate !== null && (
-                <div className="bg-background/50 rounded-lg p-3">
-                  <span className="text-xs text-muted-foreground block mb-1">TVA</span>
-                  <span className="font-semibold">{lastResult.tvaRate}% {lastResult.montantTVA ? `— ${lastResult.montantTVA} ${lastResult.devise}` : ''}</span>
+              {lastResult.tvaRate != null && (
+                <div className="bg-background/50 rounded-lg p-2 sm:p-3">
+                  <span className="text-[10px] text-muted-foreground block mb-0.5">TVA</span>
+                  <span className="font-semibold text-sm">{lastResult.tvaRate}%</span>
                 </div>
               )}
               {lastResult.categorie && (
-                <div className="bg-background/50 rounded-lg p-3">
-                  <span className="text-xs text-muted-foreground block mb-1">Catégorie</span>
+                <div className="bg-background/50 rounded-lg p-2 sm:p-3">
+                  <span className="text-[10px] text-muted-foreground block mb-0.5">Catégorie</span>
                   <span className="font-medium text-xs">{lastResult.categorie}</span>
                 </div>
               )}
               {lastResult.tiers && (
-                <div className="bg-background/50 rounded-lg p-3">
-                  <span className="text-xs text-muted-foreground block mb-1">Tiers</span>
+                <div className="bg-background/50 rounded-lg p-2 sm:p-3">
+                  <span className="text-[10px] text-muted-foreground block mb-0.5">Tiers</span>
                   <span className="font-medium text-xs">{lastResult.tiers}</span>
                 </div>
               )}
               {lastResult.type && (
-                <div className="bg-background/50 rounded-lg p-3">
-                  <span className="text-xs text-muted-foreground block mb-1">Type</span>
-                  <Badge variant={lastResult.type === 'credit' ? 'default' : 'secondary'} className="text-xs">
+                <div className="bg-background/50 rounded-lg p-2 sm:p-3">
+                  <span className="text-[10px] text-muted-foreground block mb-0.5">Type</span>
+                  <Badge variant={lastResult.type === 'credit' ? 'default' : 'secondary'} className="text-[10px]">
                     {lastResult.type === 'credit' ? '↑ Crédit' : '↓ Débit'}
                   </Badge>
                 </div>
               )}
               {lastResult.description && (
-                <div className="col-span-2 bg-background/50 rounded-lg p-3">
-                  <span className="text-xs text-muted-foreground block mb-1">Description</span>
+                <div className="col-span-2 bg-background/50 rounded-lg p-2 sm:p-3">
+                  <span className="text-[10px] text-muted-foreground block mb-0.5">Description</span>
                   <span className="font-medium text-xs">{lastResult.description}</span>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2 pt-1">
-              {onInsertToJournal && !(autoSaveCloud) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleInsertToJournal}
-                  className="flex-1 border-primary/30 hover:bg-primary/10 h-11 touch-manipulation"
-                >
-                  <BookOpen className="h-4 w-4 mr-2" />
-                  Écriture journal
+            <div className="flex gap-2 pt-1">
+              {onInsertToJournal && !autoSaveCloud && (
+                <Button variant="outline" size="sm" onClick={handleInsertToJournal}
+                  className="flex-1 border-primary/30 hover:bg-primary/10 h-10 touch-manipulation text-xs">
+                  <BookOpen className="h-3.5 w-3.5 mr-1.5" />
+                  Journal
                 </Button>
               )}
               {onInsertToPayment && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleInsertToPayment}
-                  className="flex-1 border-primary/30 hover:bg-primary/10 h-11 touch-manipulation"
-                >
-                  <CreditCard className="h-4 w-4 mr-2" />
+                <Button variant="outline" size="sm" onClick={handleInsertToPayment}
+                  className="flex-1 border-primary/30 hover:bg-primary/10 h-10 touch-manipulation text-xs">
+                  <CreditCard className="h-3.5 w-3.5 mr-1.5" />
                   Paiement
                 </Button>
               )}
@@ -684,20 +698,14 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         )}
 
         {lastResult && !lastResult.montant && lastResult.raw && (
-          <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 space-y-2">
+          <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 space-y-2">
             <div className="flex items-center space-x-2">
               <AlertCircle className="h-4 w-4 text-warning" />
               <p className="text-xs text-warning font-medium">Montant non détecté</p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Précisez le montant et la devise dans votre dictée.
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
+              Exemple : « Achat fournitures 75 000 FCFA TVA 18% chez Prosuma »
             </p>
-            <p className="text-xs text-muted-foreground font-medium">Exemples :</p>
-            <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-              <li>«&nbsp;Achat fournitures bureau 75 000 francs CFA TVA 18% chez Prosuma&nbsp;»</li>
-              <li>«&nbsp;Facture MTN 150 000 FCFA abonnement internet&nbsp;»</li>
-              <li>«&nbsp;Encaissement client Solibra 2 500 000 XOF prestation conseil&nbsp;»</li>
-            </ul>
           </div>
         )}
       </CardContent>

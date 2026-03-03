@@ -27,61 +27,50 @@ export function StatsCard({
 }: StatsCardProps) {
   const getVariantStyles = () => {
     switch (variant) {
-      case "success":
-        return "border-success/20 bg-success/5";
-      case "warning":
-        return "border-warning/20 bg-warning/5";
-      case "destructive":
-        return "border-destructive/20 bg-destructive/5";
-      default:
-        return "border-primary/20 bg-primary/5";
+      case "success": return "border-success/20 bg-success/5";
+      case "warning": return "border-warning/20 bg-warning/5";
+      case "destructive": return "border-destructive/20 bg-destructive/5";
+      default: return "border-primary/20 bg-primary/5";
     }
   };
 
   const getIconColor = () => {
     switch (variant) {
-      case "success":
-        return "text-success";
-      case "warning":
-        return "text-warning";
-      case "destructive":
-        return "text-destructive";
-      default:
-        return "text-primary";
+      case "success": return "text-success";
+      case "warning": return "text-warning";
+      case "destructive": return "text-destructive";
+      default: return "text-primary";
     }
   };
 
   return (
     <Card className={cn(
-      "card-modern transition-all duration-300 hover:scale-105",
+      "card-modern transition-all duration-300",
       getVariantStyles(),
       className
     )}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <div className="flex items-baseline space-x-2">
-              <p className="text-3xl font-bold text-foreground">{value}</p>
+      <CardContent className="p-3 sm:p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="space-y-0.5 sm:space-y-1 min-w-0">
+            <p className="text-[10px] sm:text-xs font-medium text-muted-foreground truncate">{title}</p>
+            <div className="flex items-baseline space-x-1.5 flex-wrap">
+              <p className="text-lg sm:text-2xl font-bold text-foreground leading-tight">{value}</p>
               {trend && (
-                <Badge
-                  variant={trend.value > 0 ? "default" : "secondary"}
-                  className="text-xs"
-                >
-                  {trend.value > 0 ? "+" : ""}{trend.value}% {trend.label}
+                <Badge variant={trend.value > 0 ? "default" : "secondary"} className="text-[9px] sm:text-xs h-4 sm:h-5 px-1 sm:px-1.5">
+                  +{trend.value}
                 </Badge>
               )}
             </div>
             {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{description}</p>
             )}
           </div>
           <div className={cn(
-            "flex h-12 w-12 items-center justify-center rounded-full",
+            "flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full flex-shrink-0",
             getIconColor(),
             "bg-current/10"
           )}>
-            <Icon className="h-6 w-6" />
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         </div>
       </CardContent>
