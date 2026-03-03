@@ -7,87 +7,64 @@ interface DashboardStatsProps {
 }
 
 export function DashboardStats({ entries, payments }: DashboardStatsProps) {
-  // Calculate totals
   const totalEntries = entries.length;
   const totalPayments = payments.length;
   
-  // Calculate amount totals
-  const totalEntriesAmount = entries.reduce((sum, entry) => {
-    const amount = parseFloat(entry.montant) || 0;
-    return sum + amount;
-  }, 0);
+  const totalEntriesAmount = entries.reduce((sum, entry) => sum + (parseFloat(entry.montant) || 0), 0);
+  const totalPaymentsAmount = payments.reduce((sum, payment) => sum + (parseFloat(payment.montant) || 0), 0);
   
-  const totalPaymentsAmount = payments.reduce((sum, payment) => {
-    const amount = parseFloat(payment.montant) || 0;
-    return sum + amount;
-  }, 0);
-  
-  // Recent activity (last 7 days)
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
-  
-  const recentEntries = entries.filter(entry => 
-    new Date(entry.timestamp) > weekAgo
-  ).length;
-  
-  const recentPayments = payments.filter(payment => 
-    new Date(payment.timestamp) > weekAgo
-  ).length;
+  const recentEntries = entries.filter(entry => new Date(entry.created_at || entry.timestamp) > weekAgo).length;
+  const recentPayments = payments.filter(payment => new Date(payment.created_at || payment.timestamp) > weekAgo).length;
+
+  const formatAmount = (amount: number) => {
+    return amount.toLocaleString('fr-FR', { maximumFractionDigits: 0 });
+  };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
       <StatsCard
-        title="Écritures comptables"
+        title="Écritures"
         value={totalEntries}
-        description={`${totalEntriesAmount.toFixed(2)} HBAR total`}
+        description={`${formatAmount(totalEntriesAmount)} FCFA`}
         icon={BookOpen}
-        trend={recentEntries > 0 ? {
-          value: recentEntries,
-          label: "cette semaine"
-        } : undefined}
+        trend={recentEntries > 0 ? { value: recentEntries, label: "cette semaine" } : undefined}
         variant="default"
       />
-      
       <StatsCard
         title="Transactions"
         value={totalPayments}
-        description={`${totalPaymentsAmount.toFixed(2)} HBAR traités`}
+        description={`${formatAmount(totalPaymentsAmount)} FCFA`}
         icon={CreditCard}
-        trend={recentPayments > 0 ? {
-          value: recentPayments,
-          label: "cette semaine"
-        } : undefined}
+        trend={recentPayments > 0 ? { value: recentPayments, label: "cette semaine" } : undefined}
         variant="success"
       />
-      
       <StatsCard
         title="Volume total"
-        value={`${(totalEntriesAmount + totalPaymentsAmount).toFixed(2)}`}
-        description="HBAR enregistrés"
+        value={formatAmount(totalEntriesAmount + totalPaymentsAmount)}
+        description="FCFA enregistrés"
         icon={TrendingUp}
         variant="warning"
       />
-      
       <StatsCard
-        title="Sécurité blockchain"
+        title="Blockchain"
         value="100%"
-        description="Toutes les opérations on-chain"
+        description="Opérations on-chain"
         icon={Shield}
         variant="success"
       />
-      
       <StatsCard
         title="Conformité"
         value="Actif"
-        description="Audit trail complet"
+        description="Audit trail"
         icon={Calculator}
         variant="default"
       />
-      
       <StatsCard
-        title="Activité récente"
+        title="Activité"
         value={recentEntries + recentPayments}
-        description="Opérations cette semaine"
+        description="Cette semaine"
         icon={Clock}
         variant={recentEntries + recentPayments > 0 ? "success" : "default"}
       />
