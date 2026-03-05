@@ -28,7 +28,6 @@ interface VoiceToEntryProps {
   onInsertToPayment?: (entry: ExtractedEntry) => void;
 }
 
-const hasMediaRecorder = typeof MediaRecorder !== "undefined";
 const hasSpeechRecognition = typeof window !== "undefined" && 
   (('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window));
 
@@ -42,34 +41,30 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const [lastResult, setLastResult] = useState<ExtractedEntry | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
-  const [useSpeechAPI, setUseSpeechAPI] = useState(hasSpeechRecognition);
   const [autoSaveCloud, setAutoSaveCloud] = useState(true);
   const [autoSaveBlockchain, setAutoSaveBlockchain] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
-  const transcriptRef = useRef<string>("");
   const finalPartsRef = useRef<string[]>([]);
+  const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    return () => {
-      cleanup();
-    };
+    return () => { cleanup(); };
   }, []);
 
   const cleanup = () => {
     isListeningRef.current = false;
     if (timerRef.current) clearInterval(timerRef.current);
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch {}
       recognitionRef.current = null;
@@ -112,7 +107,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         onInsertToJournal(entry);
         toast({
           title: "💾 Sauvegardé automatiquement",
-          description: `${entry.montant} ${entry.devise || 'XOF'} — enregistré dans le Cloud`,
+          description: `${entry.montant?.toLocaleString('fr-FR')} ${entry.devise || 'XOF'} — enregistré dans le Cloud`,
         });
       }
       if (autoSaveBlockchain && onInsertToJournal) {
@@ -157,218 +152,152 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
-  // ---- Web Speech API with auto-restart ----
-  const startSpeechRecognition = useCallback(async () => {
-    try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        setUseSpeechAPI(false);
-        await startMediaRecorder();
-        return;
+  // Core: start speech recognition directly from user gesture
+  const startRecording = useCallback(async () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({
+        title: "Non supporté",
+        description: "Utilisez Chrome, Edge ou Safari pour la reconnaissance vocale",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Clean up previous instance
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch {}
+    }
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    finalPartsRef.current = [];
+    isListeningRef.current = true;
+
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "fr-FR";
+    recognition.maxAlternatives = 3;
+
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      let sessionFinal = "";
+      
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        // Pick best alternative
+        let bestText = result[0].transcript;
+        let bestConfidence = result[0].confidence || 0;
+        for (let a = 1; a < result.length; a++) {
+          if ((result[a].confidence || 0) > bestConfidence) {
+            bestText = result[a].transcript;
+            bestConfidence = result[a].confidence;
+          }
+        }
+        if (result.isFinal) {
+          sessionFinal += bestText + " ";
+        } else {
+          interim += bestText;
+        }
       }
+      
+      if (sessionFinal.trim()) {
+        finalPartsRef.current.push(sessionFinal.trim());
+      }
+      
+      const accumulated = finalPartsRef.current.join(" ");
+      const fullText = accumulated + (interim ? " " + interim : "");
+      setLiveTranscript(fullText.trim());
+    };
 
-      const recognition = new SpeechRecognition();
-      recognitionRef.current = recognition;
-      transcriptRef.current = "";
-      finalPartsRef.current = [];
-      isListeningRef.current = true;
+    recognition.onerror = (event: any) => {
+      console.warn("Speech recognition error:", event.error);
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        toast({
+          title: "Microphone non autorisé",
+          description: "Autorisez l'accès au microphone dans les paramètres du navigateur",
+          variant: "destructive",
+        });
+        isListeningRef.current = false;
+        setIsRecording(false);
+        stopTimer();
+        cleanupAudio();
+      }
+      // For "no-speech", "aborted", "network" — onend will handle restart
+    };
 
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "fr-FR";
-      recognition.maxAlternatives = 3;
-
-      recognition.onresult = (event: any) => {
-        let interim = "";
-        let sessionFinal = "";
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          let bestText = result[0].transcript;
-          let bestConfidence = result[0].confidence || 0;
-          for (let a = 1; a < result.length; a++) {
-            if ((result[a].confidence || 0) > bestConfidence) {
-              bestText = result[a].transcript;
-              bestConfidence = result[a].confidence;
+    recognition.onend = () => {
+      console.log("Speech recognition onend, isListening:", isListeningRef.current);
+      if (isListeningRef.current) {
+        // AUTO-RESTART: This is the key fix — browser stops after silence,
+        // but we keep restarting as long as user hasn't clicked stop
+        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = setTimeout(() => {
+          if (isListeningRef.current && recognitionRef.current) {
+            try {
+              console.log("Auto-restarting speech recognition...");
+              recognitionRef.current.start();
+            } catch (e) {
+              console.warn("Restart failed, retrying in 500ms:", e);
+              setTimeout(() => {
+                if (isListeningRef.current && recognitionRef.current) {
+                  try { recognitionRef.current.start(); } catch {}
+                }
+              }, 500);
             }
           }
-          if (result.isFinal) {
-            sessionFinal += bestText + " ";
-          } else {
-            interim += bestText;
-          }
-        }
+        }, 200);
+      } else {
+        // User manually stopped — process transcript
+        const finalText = finalPartsRef.current.join(" ").trim();
+        setIsRecording(false);
+        setAudioLevel(0);
+        stopTimer();
+        cleanupAudio();
         
-        if (sessionFinal.trim()) {
-          finalPartsRef.current.push(sessionFinal.trim());
-          transcriptRef.current = finalPartsRef.current.join(" ");
-        }
-        
-        const fullText = transcriptRef.current + (interim ? " " + interim : "");
-        setLiveTranscript(fullText.trim());
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error("Speech recognition error:", event.error);
-        if (event.error === "not-allowed") {
-          toast({
-            title: "Microphone non autorisé",
-            description: "Autorisez l'accès au microphone dans les paramètres du navigateur",
-            variant: "destructive",
-          });
-          stopRecording();
-        } else if (event.error === "no-speech") {
-          // Don't stop — just wait. onend will restart.
-        } else if (event.error === "aborted") {
-          // Normal stop
-        }
-        // For other errors, onend will handle restart
-      };
-
-      recognition.onend = () => {
-        // KEY FIX: Auto-restart if user is still recording
-        if (isListeningRef.current) {
-          try {
-            recognition.start();
-          } catch (e) {
-            console.error("Failed to restart recognition:", e);
-            // Small delay then retry
-            setTimeout(() => {
-              if (isListeningRef.current) {
-                try { recognition.start(); } catch {}
-              }
-            }, 300);
-          }
+        if (finalText) {
+          setTranscript(finalText);
+          setLiveTranscript("");
+          extractFromTranscript(finalText);
         } else {
-          // User stopped — process the transcript
-          const finalText = transcriptRef.current.trim();
-          setIsRecording(false);
-          setAudioLevel(0);
-          stopTimer();
-          
-          if (finalText) {
-            setTranscript(finalText);
-            setLiveTranscript("");
-            extractFromTranscript(finalText);
-          } else {
-            toast({ title: "Aucune parole détectée", description: "Réessayez en parlant clairement", variant: "destructive" });
-          }
+          toast({ 
+            title: "Aucune parole détectée", 
+            description: "Parlez clairement dans le micro et réessayez",
+            variant: "destructive" 
+          });
         }
-      };
+      }
+    };
 
-      // Start audio visualizer first
-      await startAudioVisualizer();
-      
-      // Then start recognition (from user gesture context)
+    // Start audio visualizer FIRST (needs getUserMedia)
+    await startAudioVisualizer();
+    
+    // Start recognition directly from click handler (user gesture)
+    try {
       recognition.start();
       setIsRecording(true);
       setTranscript("");
       setLiveTranscript("");
       setLastResult(null);
       startTimer();
-      
-      toast({ title: "🎙️ Enregistrement démarré", description: "Parlez maintenant..." });
+      toast({ title: "🎙️ Enregistrement démarré", description: "Parlez maintenant — l'IA écoute en continu" });
     } catch (err: any) {
-      console.error("Speech recognition start error:", err);
-      setUseSpeechAPI(false);
-      await startMediaRecorder();
+      console.error("Failed to start recognition:", err);
+      toast({
+        title: "Erreur micro",
+        description: "Impossible de démarrer l'enregistrement. Vérifiez les permissions.",
+        variant: "destructive",
+      });
+      isListeningRef.current = false;
+      cleanupAudio();
     }
   }, []);
 
-  // ---- MediaRecorder fallback ----
-  const startMediaRecorder = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 44100 }
-      });
-      audioStreamRef.current = stream;
-      
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-      const source = audioContext.createMediaStreamSource(stream);
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyserRef.current = analyser;
-
-      const updateLevel = () => {
-        if (!analyserRef.current) return;
-        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-        analyserRef.current.getByteFrequencyData(dataArray);
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        setAudioLevel(average / 255);
-        animationRef.current = requestAnimationFrame(updateLevel);
-      };
-
-      let mimeType = "audio/webm";
-      if (!MediaRecorder.isTypeSupported("audio/webm")) {
-        mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/ogg";
-      }
-
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        try { audioContext.close(); } catch {}
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = null;
-        }
-        setAudioLevel(0);
-        toast({
-          title: "Transcription non disponible",
-          description: "Utilisez Chrome ou Edge pour la transcription vocale automatique",
-          variant: "destructive",
-        });
-        setIsProcessing(false);
-      };
-
-      mediaRecorder.start(1000);
-      isListeningRef.current = true;
-      setIsRecording(true);
-      setTranscript("");
-      setLastResult(null);
-      startTimer();
-      updateLevel();
-    } catch (err: any) {
-      console.error("Microphone access error:", err);
-      toast({
-        title: "Accès micro refusé",
-        description: "Autorisez l'accès au microphone dans les paramètres du navigateur",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const stopRecording = () => {
-    isListeningRef.current = false;
-    stopTimer();
-    
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
-      // onend handler will process the transcript
-    }
-    
-    if (mediaRecorderRef.current) {
-      try {
-        if (mediaRecorderRef.current.state !== "inactive") {
-          mediaRecorderRef.current.stop();
-        }
-      } catch {}
-    }
-    
+  const cleanupAudio = () => {
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
-    
-    // Clean up audio stream
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach(t => t.stop());
       audioStreamRef.current = null;
@@ -377,9 +306,24 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       try { audioContextRef.current.close(); } catch {}
       audioContextRef.current = null;
     }
+  };
+
+  const stopRecording = useCallback(() => {
+    console.log("stopRecording called");
+    isListeningRef.current = false;
+    if (restartTimeoutRef.current) {
+      clearTimeout(restartTimeoutRef.current);
+      restartTimeoutRef.current = null;
+    }
+    stopTimer();
+    
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+      // onend handler will process the transcript
+    }
     
     setAudioLevel(0);
-  };
+  }, []);
 
   const extractFromTranscript = async (text: string) => {
     setIsProcessing(true);
@@ -414,7 +358,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         onEntryExtracted(entry);
         toast({
           title: "✅ Données extraites",
-          description: `${entry.description || "Écriture"} — ${entry.montant} ${entry.devise}`,
+          description: `${entry.description || "Écriture"} — ${entry.montant?.toLocaleString('fr-FR')} ${entry.devise}`,
         });
         if (autoSaveCloud || autoSaveBlockchain) {
           await autoSaveEntry(entry);
@@ -442,25 +386,21 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     if (isRecording) {
       stopRecording();
     } else {
-      if (useSpeechAPI) {
-        await startSpeechRecognition();
-      } else {
-        await startMediaRecorder();
-      }
+      await startRecording();
     }
   };
 
   const handleInsertToJournal = () => {
     if (lastResult && onInsertToJournal) {
       onInsertToJournal(lastResult);
-      toast({ title: "Inséré dans Journal", description: "Les données ont été ajoutées au formulaire" });
+      toast({ title: "Inséré dans Journal", description: "Les données ont été ajoutées" });
     }
   };
 
   const handleInsertToPayment = () => {
     if (lastResult && onInsertToPayment) {
       onInsertToPayment(lastResult);
-      toast({ title: "Inséré dans Paiement", description: "Les données ont été ajoutées au formulaire" });
+      toast({ title: "Inséré dans Paiement", description: "Les données ont été ajoutées" });
     }
   };
 
@@ -468,7 +408,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     const text = transcript || liveTranscript;
     if (text) {
       navigator.clipboard.writeText(text);
-      toast({ title: "Copié", description: "Transcription copiée dans le presse-papier" });
+      toast({ title: "Copié", description: "Transcription copiée" });
     }
   };
 
@@ -527,10 +467,10 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           </div>
         </div>
 
-        {!hasMediaRecorder && !hasSpeechRecognition && (
+        {!hasSpeechRecognition && (
           <div className="flex items-center space-x-2 text-warning bg-warning/10 p-3 rounded-lg">
             <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span className="text-xs">Enregistrement non supporté. Utilisez Chrome ou Safari.</span>
+            <span className="text-xs">Utilisez Chrome, Edge ou Safari pour la reconnaissance vocale.</span>
           </div>
         )}
 
@@ -553,7 +493,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
 
           <Button
             onClick={toggleRecording}
-            disabled={isProcessing || isSaving || (!hasMediaRecorder && !hasSpeechRecognition)}
+            disabled={isProcessing || isSaving || !hasSpeechRecognition}
             size="lg"
             className={`h-16 w-16 sm:h-20 sm:w-20 rounded-full transition-all duration-300 touch-manipulation ${
               isRecording
@@ -588,7 +528,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
               </div>
             )}
             <p className="text-xs sm:text-sm text-muted-foreground">
-              {isSaving ? "Sauvegarde..." : isProcessing ? "Analyse IA..." : isRecording ? "Parlez — appuyez pour arrêter" : "Appuyez pour dicter"}
+              {isSaving ? "Sauvegarde..." : isProcessing ? "Analyse IA..." : isRecording ? "Parlez — appuyez ■ pour arrêter" : "Appuyez pour dicter"}
             </p>
           </div>
         </div>
@@ -613,7 +553,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
                 </div>
               )}
             </div>
-            <p className="text-xs sm:text-sm leading-relaxed">{displayTranscript}</p>
+            <p className="text-xs sm:text-sm leading-relaxed break-words">{displayTranscript}</p>
           </div>
         )}
 
@@ -636,18 +576,18 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
             <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-sm">
               <div className="bg-background/50 rounded-lg p-2 sm:p-3">
                 <span className="text-[10px] text-muted-foreground block mb-0.5">Montant TTC</span>
-                <span className="font-bold text-base sm:text-lg">{lastResult.montant?.toLocaleString()} {lastResult.devise}</span>
+                <span className="font-bold text-sm sm:text-lg">{lastResult.montant?.toLocaleString('fr-FR')} {lastResult.devise}</span>
               </div>
               {lastResult.montantHT && (
                 <div className="bg-background/50 rounded-lg p-2 sm:p-3">
                   <span className="text-[10px] text-muted-foreground block mb-0.5">HT</span>
-                  <span className="font-semibold text-sm">{lastResult.montantHT?.toLocaleString()} {lastResult.devise}</span>
+                  <span className="font-semibold text-xs sm:text-sm">{lastResult.montantHT?.toLocaleString('fr-FR')} {lastResult.devise}</span>
                 </div>
               )}
               {lastResult.tvaRate != null && (
                 <div className="bg-background/50 rounded-lg p-2 sm:p-3">
                   <span className="text-[10px] text-muted-foreground block mb-0.5">TVA</span>
-                  <span className="font-semibold text-sm">{lastResult.tvaRate}%</span>
+                  <span className="font-semibold text-xs sm:text-sm">{lastResult.tvaRate}%</span>
                 </div>
               )}
               {lastResult.categorie && (

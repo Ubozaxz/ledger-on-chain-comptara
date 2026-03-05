@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   ShieldCheck, AlertTriangle, TrendingUp, TrendingDown, 
-  Loader2, RefreshCw, CheckCircle, XCircle, Info,
+  Loader2, RefreshCw, CheckCircle, XCircle,
   BarChart3, PieChart, Target, Lightbulb, FileText,
   Percent, Calculator, AlertCircle, Maximize2
 } from "lucide-react";
@@ -284,27 +284,6 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
   const displayedMetrics = metrics.length > 0 ? metrics : calculateMetrics();
   const displayedRecs = recommendations.length > 0 ? recommendations : generateRecommendations(displayedMetrics);
 
-  const ReportContent = ({ maxHeight }: { maxHeight?: string }) => (
-    <div className={maxHeight ? `max-h-[${maxHeight}] overflow-y-auto` : ""}>
-      {auditResult ? (
-        <div className="prose prose-sm dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed
-          prose-headings:text-foreground prose-h2:text-base prose-h3:text-sm prose-h2:mt-4 prose-h3:mt-3
-          prose-table:text-xs prose-td:px-2 prose-td:py-1 prose-th:px-2 prose-th:py-1
-          prose-ul:my-1 prose-li:my-0.5 prose-p:my-1.5">
-          <ReactMarkdown>{auditResult}</ReactMarkdown>
-        </div>
-      ) : (
-        <div className="text-center py-8 text-muted-foreground">
-          <ShieldCheck className="h-10 w-10 mx-auto mb-3 opacity-30" />
-          <p className="font-medium text-sm">Prêt pour l'audit</p>
-          <p className="text-xs mt-1">
-            L'IA analysera {entries.length} écritures et {payments.length} paiements.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <Card className="card-modern">
       <CardHeader className="pb-2 p-3 sm:p-6">
@@ -314,7 +293,7 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
             <span className="text-sm sm:text-base">Audit IA</span>
           </div>
           <Button onClick={analyzeLedger} disabled={isAnalyzing} size="sm"
-            className="bg-gradient-primary hover:opacity-90 h-8 text-xs">
+            className="bg-gradient-primary hover:opacity-90 h-8 text-xs touch-manipulation">
             {isAnalyzing ? (
               <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Analyse...</>
             ) : (
@@ -375,7 +354,7 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
           </TabsContent>
 
           <TabsContent value="recommendations" className="space-y-2">
-            <ScrollArea className="max-h-[400px]">
+            <ScrollArea className="h-[300px] sm:h-[400px]">
               <div className="space-y-2 pr-2">
                 {displayedRecs.map((rec, idx) => (
                   <div key={idx} className={`rounded-lg p-2.5 sm:p-3 border ${
@@ -388,7 +367,7 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
                       {getRecIcon(rec.type)}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-xs sm:text-sm">{rec.title}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{rec.description}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 break-words">{rec.description}</p>
                         {rec.action && (
                           <Button variant="link" size="sm" className="h-5 p-0 mt-1 text-[10px] sm:text-xs">
                             {rec.action} →
@@ -411,23 +390,38 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
           <TabsContent value="report" className="space-y-2">
             {/* Inline preview */}
             <ScrollArea className="h-[250px] sm:h-[350px] rounded-lg border bg-muted/20 p-3">
-              <ReportContent />
+              {auditResult ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed
+                  prose-headings:text-foreground prose-h2:text-base prose-h3:text-sm prose-h2:mt-4 prose-h3:mt-3
+                  prose-table:text-xs prose-td:px-2 prose-td:py-1 prose-th:px-2 prose-th:py-1
+                  prose-ul:my-1 prose-li:my-0.5 prose-p:my-1.5">
+                  <ReactMarkdown>{auditResult}</ReactMarkdown>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <ShieldCheck className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium text-sm">Prêt pour l'audit</p>
+                  <p className="text-xs mt-1">
+                    L'IA analysera {entries.length} écritures et {payments.length} paiements.
+                  </p>
+                </div>
+              )}
             </ScrollArea>
             
-            {/* Full-screen dialog for reading */}
+            {/* Full-screen dialog for reading - FIXED for mobile */}
             {auditResult && (
               <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full h-9 text-xs">
+                  <Button variant="outline" size="sm" className="w-full h-9 text-xs touch-manipulation">
                     <Maximize2 className="h-3.5 w-3.5 mr-1.5" />
                     Lire le rapport complet
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] flex flex-col p-0">
-                  <DialogHeader className="p-4 pb-2 border-b">
+                <DialogContent className="w-[95vw] max-w-3xl h-[85vh] flex flex-col p-0 gap-0">
+                  <DialogHeader className="p-3 sm:p-4 pb-2 border-b flex-shrink-0">
                     <DialogTitle className="flex items-center space-x-2 text-sm sm:text-base">
                       <ShieldCheck className="h-5 w-5 text-primary" />
-                      <span>Rapport d'Audit Comptable</span>
+                      <span>Rapport d'Audit</span>
                       {healthScore !== null && (
                         <Badge className={getHealthBadge(healthScore).bg + " text-xs ml-2"}>
                           {healthScore}%
@@ -435,17 +429,23 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
                       )}
                     </DialogTitle>
                   </DialogHeader>
-                  <ScrollArea className="flex-1 p-4 overflow-y-auto">
+                  <div className="flex-1 overflow-y-auto p-3 sm:p-4">
                     <div className="prose prose-sm dark:prose-invert max-w-none
-                      prose-headings:text-foreground prose-h2:text-base sm:prose-h2:text-lg prose-h3:text-sm sm:prose-h3:text-base
-                      prose-h2:mt-5 prose-h3:mt-3 prose-h2:mb-2 prose-h3:mb-1
-                      prose-table:text-xs sm:prose-table:text-sm prose-td:px-2 prose-td:py-1 prose-th:px-2 prose-th:py-1
+                      prose-headings:text-foreground 
+                      prose-h2:text-sm sm:prose-h2:text-base 
+                      prose-h3:text-xs sm:prose-h3:text-sm
+                      prose-h2:mt-4 prose-h3:mt-3 prose-h2:mb-2 prose-h3:mb-1
+                      prose-table:text-[10px] sm:prose-table:text-xs 
+                      prose-td:px-1.5 prose-td:py-0.5 prose-th:px-1.5 prose-th:py-0.5
                       prose-table:border prose-th:border prose-td:border prose-th:bg-muted/50
-                      prose-ul:my-1.5 prose-li:my-0.5 prose-p:my-2 prose-p:text-xs sm:prose-p:text-sm
-                      prose-strong:text-foreground">
+                      prose-table:w-full prose-table:table-fixed
+                      prose-ul:my-1.5 prose-li:my-0.5 
+                      prose-p:my-1.5 prose-p:text-xs sm:prose-p:text-sm
+                      prose-strong:text-foreground
+                      [&_table]:block [&_table]:overflow-x-auto [&_table]:whitespace-nowrap sm:[&_table]:whitespace-normal">
                       <ReactMarkdown>{auditResult}</ReactMarkdown>
                     </div>
-                  </ScrollArea>
+                  </div>
                 </DialogContent>
               </Dialog>
             )}

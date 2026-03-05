@@ -46,7 +46,6 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
     try {
       let txHash = "";
 
-      // Only execute on-chain if user opted in AND wallet is available
       if (executeOnChain && hasWallet) {
         const { sendHBAR, getExplorerTxUrl } = await import("@/lib/hedera");
         txHash = await sendHBAR({ to: paymentData.destinataire, amountHBAR: paymentData.montant });
@@ -77,10 +76,9 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
 
       toast({
         title: `${paymentData.type === 'paiement' ? 'Paiement' : 'Encaissement'} enregistré`,
-        description: `${paymentData.montant} ${paymentData.devise} - ${txHash ? 'Exécuté on-chain' : 'Sauvegardé en cloud'}`,
+        description: `${paymentData.montant} ${paymentData.devise} - ${txHash ? 'On-chain' : 'Cloud'}`,
       });
 
-      // Reset form
       setPaymentData({
         type: "paiement",
         destinataire: "",
@@ -101,22 +99,22 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center space-x-2">
+    <Card className="card-modern">
+      <CardHeader className="p-3 sm:p-6">
+        <CardTitle className="flex items-center space-x-2 text-sm sm:text-base">
           <CreditCard className="h-5 w-5 text-primary" />
           <span>{t('paymentForm')}</span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 p-3 sm:p-6 pt-0">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>{t('transactionType')}</Label>
+            <Label className="text-sm">{t('transactionType')}</Label>
             <Select 
               value={paymentData.type} 
               onValueChange={(value) => setPaymentData({ ...paymentData, type: value })}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-11">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -136,24 +134,25 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
             </Select>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="destinataire">{t('recipient')} *</Label>
+              <Label htmlFor="destinataire" className="text-sm">{t('recipient')} *</Label>
               <Input
                 id="destinataire"
                 placeholder={executeOnChain ? "0x742d35Cc..." : "Nom ou adresse"}
                 value={paymentData.destinataire}
                 onChange={(e) => setPaymentData({ ...paymentData, destinataire: e.target.value })}
+                className="h-11"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="devise">{t('currency')}</Label>
+              <Label htmlFor="devise" className="text-sm">{t('currency')}</Label>
               <Select 
                 value={paymentData.devise} 
                 onValueChange={(value) => setPaymentData({ ...paymentData, devise: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -168,7 +167,7 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="montant">{t('amount')} *</Label>
+            <Label htmlFor="montant" className="text-sm">{t('amount')} *</Label>
             <Input
               id="montant"
               type="number"
@@ -176,30 +175,32 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
               placeholder="0.00"
               value={paymentData.montant}
               onChange={(e) => setPaymentData({ ...paymentData, montant: e.target.value })}
+              className="h-11"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="objet">{t('object')} *</Label>
+            <Label htmlFor="objet" className="text-sm">{t('object')} *</Label>
             <Textarea
               id="objet"
               placeholder="Décrivez l'objet du paiement..."
               value={paymentData.objet}
               onChange={(e) => setPaymentData({ ...paymentData, objet: e.target.value })}
+              className="min-h-[80px] resize-none"
               required
             />
           </div>
 
           {/* Blockchain execution toggle */}
-          <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
             <div className="flex items-center space-x-3">
               <Link2 className="h-5 w-5 text-primary" />
               <div>
                 <p className="text-sm font-medium">Exécuter sur blockchain</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] sm:text-xs text-muted-foreground">
                   {hasWallet 
-                    ? "Envoyer réellement des HBAR via votre wallet" 
+                    ? "Envoyer réellement via votre wallet" 
                     : "Connectez un wallet EVM pour activer"}
                 </p>
               </div>
@@ -213,13 +214,13 @@ export const PaymentForm = ({ onPaymentAdded }: PaymentFormProps) => {
 
           <Button 
             type="submit" 
-            className="w-full bg-primary hover:bg-primary-hover"
+            className="w-full bg-gradient-primary hover:opacity-90 h-12 text-base touch-manipulation"
             disabled={isProcessing}
           >
             {isProcessing ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {executeOnChain ? "Transaction en cours..." : "Enregistrement..."}
+                {executeOnChain ? "Transaction..." : "Enregistrement..."}
               </>
             ) : (
               paymentData.type === 'paiement' ? "Enregistrer le paiement" : "Confirmer l'encaissement"

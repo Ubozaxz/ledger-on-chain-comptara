@@ -16,10 +16,6 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
     return new Date(dateString).toLocaleDateString('fr-FR');
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString('fr-FR');
-  };
-
   const handleViewExplorer = (txHash: string | null) => {
     if (!txHash) return;
     import("@/lib/hedera").then(({ getExplorerTxUrl }) => {
@@ -34,7 +30,7 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
       await generateEntryProofPDF(entry);
       toast({
         title: "Justificatif généré",
-        description: `PDF téléchargé pour la transaction ${entry.tx_hash?.slice(0, 8) || entry.id.slice(0, 8)}...`,
+        description: `PDF téléchargé`,
       });
     } catch (error) {
       toast({
@@ -47,17 +43,17 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
 
   if (entries.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
+      <Card className="card-modern">
+        <CardHeader className="p-4">
+          <CardTitle className="flex items-center space-x-2 text-sm sm:text-base">
             <History className="h-5 w-5 text-primary" />
             <span>Historique des écritures</span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Aucune écriture enregistrée pour le moment</p>
+        <CardContent className="p-4">
+          <div className="text-center py-6 text-muted-foreground">
+            <History className="h-10 w-10 mx-auto mb-3 opacity-50" />
+            <p className="text-sm">Aucune écriture enregistrée</p>
           </div>
         </CardContent>
       </Card>
@@ -65,70 +61,73 @@ export const EntriesHistory = ({ entries }: EntriesHistoryProps) => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center space-x-2">
+    <Card className="card-modern">
+      <CardHeader className="p-3 sm:p-6">
+        <CardTitle className="flex items-center space-x-2 text-sm sm:text-base">
           <History className="h-5 w-5 text-primary" />
-          <span>Historique des écritures ({entries.length})</span>
+          <span>Historique ({entries.length})</span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 p-3 sm:p-6 pt-0">
         {entries.map((entry) => (
           <Card key={entry.id} className="border border-border/50">
-            <CardContent className="p-4">
-              <div className="flex flex-col space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <h4 className="font-medium text-foreground">{entry.libelle}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDate(entry.date)} • {formatTimestamp(entry.created_at)}
+            <CardContent className="p-3">
+              <div className="flex flex-col space-y-2">
+                {/* Top row: label + amount */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-medium text-foreground text-sm truncate">{entry.libelle}</h4>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">
+                      {formatDate(entry.date)}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-lg text-foreground">
-                      {entry.montant} {entry.devise}
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-semibold text-sm sm:text-base text-foreground">
+                      {Number(entry.montant).toLocaleString('fr-FR')} {entry.devise || 'XOF'}
                     </p>
-                    <Badge variant="default">
-                      Confirmé
-                    </Badge>
+                    <Badge variant="default" className="text-[10px]">Confirmé</Badge>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                {/* Debit / Credit */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="font-medium text-muted-foreground">Débit: </span>
+                    <span className="text-muted-foreground">Débit: </span>
                     <span className="text-foreground">{entry.debit || '-'}</span>
                   </div>
                   <div>
-                    <span className="font-medium text-muted-foreground">Crédit: </span>
+                    <span className="text-muted-foreground">Crédit: </span>
                     <span className="text-foreground">{entry.credit || '-'}</span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-border/30">
-                  <div className="flex items-center space-x-2">
-                    <Hash className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {entry.tx_hash || '-'}
+                {/* Hash + actions — MOBILE OPTIMIZED */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1 border-t border-border/30">
+                  <div className="flex items-center space-x-1 min-w-0">
+                    <Hash className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                    <span className="font-mono text-[10px] text-muted-foreground truncate">
+                      {entry.tx_hash ? entry.tx_hash.slice(0, 16) + '...' : 'Pas de hash'}
                     </span>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex gap-1.5 flex-shrink-0">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleViewExplorer(entry.tx_hash)}
                       disabled={!entry.tx_hash}
+                      className="h-8 px-2 text-[10px] sm:text-xs touch-manipulation"
                     >
-                      <ExternalLink className="h-4 w-4 mr-1" />
+                      <ExternalLink className="h-3 w-3 mr-1" />
                       Explorer
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleGenerateProof(entry)}
+                      className="h-8 px-2 text-[10px] sm:text-xs touch-manipulation"
                     >
-                      <FileText className="h-4 w-4 mr-1" />
-                      Justificatif
+                      <FileText className="h-3 w-3 mr-1" />
+                      PDF
                     </Button>
                   </div>
                 </div>
