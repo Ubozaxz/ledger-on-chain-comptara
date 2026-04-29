@@ -102,7 +102,7 @@ export const FileAnalyzer = () => {
         body: JSON.stringify({
           action: "analyze-file",
           fileData: data.slice(0, 200),
-          prompt: `Analyse complète et approfondie de ce fichier comptable. Extrais les vraies données, détecte TOUTES les erreurs, écarts, gaps et anomalies. Propose des solutions et corrections pour chaque problème. Donne des recommandations professionnelles.`,
+          prompt: `${buildLocalAuditSummary(data)}\n\nAnalyse complète et approfondie de ce fichier comptable. Extrais les vraies données, détecte TOUTES les erreurs, écarts, gaps et anomalies. Propose des solutions et corrections prêtes à copier-coller pour chaque problème. Donne des recommandations professionnelles.`,
         }),
       });
 
