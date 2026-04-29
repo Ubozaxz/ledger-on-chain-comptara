@@ -251,155 +251,44 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   }, [toast]);
 
-  // Core: start speech recognition directly from user gesture
+  // Core: start from a real user gesture, keep microphone alive, and never fabricate speech.
   const startRecording = useCallback(async () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+    if (!navigator.mediaDevices?.getUserMedia) {
       toast({
-        title: "Non supporté",
-        description: "Utilisez Chrome, Edge ou Safari pour la reconnaissance vocale",
+        title: "Microphone non disponible",
+        description: "Votre navigateur ne permet pas l'accès audio. Utilisez Chrome, Edge ou Safari récent.",
         variant: "destructive",
       });
       return;
     }
 
-    // Clean up previous instance
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch {}
-    }
-
-    const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
     finalPartsRef.current = [];
-      liveTranscriptRef.current = "";
-      lastSpeechAtRef.current = null;
-      finishingRef.current = false;
+    liveTranscriptRef.current = "";
+    lastSpeechAtRef.current = null;
+    finishingRef.current = false;
     isListeningRef.current = true;
+    setTranscript("");
+    setLiveTranscript("");
+    setLastResult(null);
 
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "fr-FR";
-    recognition.maxAlternatives = 3;
-
-    recognition.onresult = (event: any) => {
-      let interim = "";
-      let sessionFinal = "";
-      
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        // Pick best alternative
-        let bestText = result[0].transcript;
-        let bestConfidence = result[0].confidence || 0;
-        for (let a = 1; a < result.length; a++) {
-          if ((result[a].confidence || 0) > bestConfidence) {
-            bestText = result[a].transcript;
-            bestConfidence = result[a].confidence;
-          }
-        }
-        if (result.isFinal) {
-          sessionFinal += bestText + " ";
-        } else {
-          interim += bestText;
-        }
-      }
-      
-      if (sessionFinal.trim()) {
-        finalPartsRef.current.push(sessionFinal.trim());
-        lastSpeechAtRef.current = Date.now();
-      } else if (interim.trim()) {
-        lastSpeechAtRef.current = Date.now();
-      }
-      
-      const accumulated = finalPartsRef.current.join(" ");
-      const fullText = accumulated + (interim ? " " + interim : "");
-      liveTranscriptRef.current = fullText.trim();
-      setLiveTranscript(fullText.trim());
-    };
-
-    recognition.onerror = (event: any) => {
-      console.warn("Speech recognition error:", event.error);
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        toast({
-          title: "Microphone non autorisé",
-          description: "Autorisez l'accès au microphone dans les paramètres du navigateur",
-          variant: "destructive",
-        });
-        isListeningRef.current = false;
-        setIsRecording(false);
-        stopTimer();
-        cleanupAudio();
-      }
-      // For "no-speech", "aborted", "network" — onend will handle restart
-    };
-
-    recognition.onend = () => {
-      console.log("Speech recognition onend, isListening:", isListeningRef.current);
-      if (isListeningRef.current) {
-        // AUTO-RESTART: This is the key fix — browser stops after silence,
-        // but we keep restarting as long as user hasn't clicked stop
-        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
-        restartTimeoutRef.current = setTimeout(() => {
-          if (isListeningRef.current && recognitionRef.current) {
-            try {
-              console.log("Auto-restarting speech recognition...");
-              recognitionRef.current.start();
-            } catch (e) {
-              console.warn("Restart failed, retrying in 500ms:", e);
-              setTimeout(() => {
-                if (isListeningRef.current && recognitionRef.current) {
-                  try { recognitionRef.current.start(); } catch {}
-                }
-              }, 500);
-            }
-          }
-        }, 200);
-      } else {
-        // User manually stopped — process transcript
-        if (finishingRef.current) return;
-        finishingRef.current = true;
-        const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
-        setIsRecording(false);
-        setAudioLevel(0);
-        stopTimer();
-        cleanupAudio();
-        
-        if (finalText) {
-          setTranscript(finalText);
-          setLiveTranscript("");
-          extractFromTranscript(finalText);
-        } else {
-          toast({ 
-            title: "Aucune parole détectée", 
-            description: "Parlez clairement dans le micro et réessayez",
-            variant: "destructive" 
-          });
-        }
-      }
-    };
-
-    // Start audio visualizer FIRST (needs getUserMedia)
     await startAudioVisualizer();
-    
-    // Start recognition directly from click handler (user gesture)
-    try {
-      recognition.start();
-      setIsRecording(true);
-      setTranscript("");
-      setLiveTranscript("");
-      setLastResult(null);
-      startTimer();
-      toast({ title: "🎙️ Enregistrement démarré", description: "Parlez maintenant — l'IA écoute en continu" });
-    } catch (err: any) {
-      console.error("Failed to start recognition:", err);
+
+    const browserStarted = await captureBrowserSpeech();
+    if (!browserStarted) {
       toast({
-        title: "Erreur micro",
-        description: "Impossible de démarrer l'enregistrement. Vérifiez les permissions.",
+        title: "Reconnaissance vocale indisponible",
+        description: "Le micro reste ouvert, mais ce navigateur ne fournit pas de transcription directe. Essayez Chrome Android, Edge ou Safari iOS.",
         variant: "destructive",
       });
-      isListeningRef.current = false;
-      cleanupAudio();
     }
-  }, []);
+
+    setIsRecording(true);
+    startTimer();
+    toast({
+      title: "🎙️ Enregistrement démarré",
+      description: browserStarted ? "Parlez maintenant — transcription réelle en continu" : "Micro actif — aucune donnée fictive ne sera créée",
+    });
+  }, [captureBrowserSpeech, toast]);
 
   const cleanupAudio = () => {
     if (animationRef.current) {
