@@ -21,6 +21,42 @@ export const FileAnalyzer = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  const buildLocalAuditSummary = (rows: any[]) => {
+    const getValue = (row: any, keys: string[]) => {
+      const found = Object.keys(row).find(k => keys.some(key => k.toLowerCase().includes(key)));
+      return found ? row[found] : undefined;
+    };
+    const toNumber = (value: any) => Number(String(value ?? '').replace(/\s/g, '').replace(',', '.').replace(/[^0-9.-]/g, '')) || 0;
+    const issues: string[] = [];
+    let debitTotal = 0, creditTotal = 0, amountTotal = 0;
+    const seen = new Map<string, number>();
+
+    rows.forEach((row, idx) => {
+      const line = row._ligne || idx + 2;
+      const debit = toNumber(getValue(row, ['débit', 'debit']));
+      const credit = toNumber(getValue(row, ['crédit', 'credit']));
+      const amount = toNumber(getValue(row, ['montant', 'amount', 'ttc']));
+      const ht = toNumber(getValue(row, ['ht']));
+      const tva = toNumber(getValue(row, ['tva']));
+      const desc = String(getValue(row, ['libellé', 'libelle', 'description', 'objet']) ?? '');
+      const date = String(getValue(row, ['date']) ?? '');
+      debitTotal += debit; creditTotal += credit; amountTotal += amount;
+      if (!date) issues.push(`Ligne ${line}: date manquante → renseigner la date de pièce.`);
+      if (!desc.trim()) issues.push(`Ligne ${line}: libellé manquant → ajouter une description comptable.`);
+      if (debit && credit && Math.abs(debit - credit) > 0.01) issues.push(`Ligne ${line}: débit ${debit} ≠ crédit ${credit} → passer une correction de ${Math.abs(debit-credit).toLocaleString('fr-FR')} FCFA.`);
+      if (!debit && !credit && !amount) issues.push(`Ligne ${line}: aucun montant détecté → compléter débit/crédit ou montant TTC.`);
+      if (ht && tva && amount && Math.abs((ht + tva) - amount) > 1) issues.push(`Ligne ${line}: HT+TVA ≠ TTC → corriger TTC à ${(ht+tva).toLocaleString('fr-FR')} FCFA ou recalculer la TVA.`);
+      const key = `${date}|${desc.toLowerCase().trim()}|${debit || credit || amount}`;
+      if (seen.has(key)) issues.push(`Ligne ${line}: doublon probable avec ligne ${seen.get(key)} → supprimer ou justifier la double saisie.`);
+      else seen.set(key, line);
+    });
+
+    const gap = debitTotal - creditTotal;
+    if (Math.abs(gap) > 0.01) issues.unshift(`Balance fichier déséquilibrée: débit ${debitTotal.toLocaleString('fr-FR')} FCFA vs crédit ${creditTotal.toLocaleString('fr-FR')} FCFA, écart ${gap.toLocaleString('fr-FR')} FCFA.`);
+
+    return `## Pré-audit déterministe sur données réelles\n- Lignes analysées: ${rows.length}\n- Total débit: ${debitTotal.toLocaleString('fr-FR')} FCFA\n- Total crédit: ${creditTotal.toLocaleString('fr-FR')} FCFA\n- Total montants: ${amountTotal.toLocaleString('fr-FR')} FCFA\n- Problèmes détectés automatiquement: ${issues.length}\n\n${issues.slice(0, 40).map((i, n) => `${n + 1}. ${i}`).join('\n') || 'Aucune anomalie bloquante détectée par le pré-audit.'}\n\nPour chaque problème, donne une correction prête à copier-coller (cellule/ligne, valeur corrigée, écriture de régularisation OHADA si utile).`;
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -66,7 +102,7 @@ export const FileAnalyzer = () => {
         body: JSON.stringify({
           action: "analyze-file",
           fileData: data.slice(0, 200),
-          prompt: `Analyse complète et approfondie de ce fichier comptable. Extrais les vraies données, détecte TOUTES les erreurs, écarts, gaps et anomalies. Propose des solutions et corrections pour chaque problème. Donne des recommandations professionnelles.`,
+          prompt: `${buildLocalAuditSummary(data)}\n\nAnalyse complète et approfondie de ce fichier comptable. Extrais les vraies données, détecte TOUTES les erreurs, écarts, gaps et anomalies. Propose des solutions et corrections prêtes à copier-coller pour chaque problème. Donne des recommandations professionnelles.`,
         }),
       });
 

@@ -30,6 +30,7 @@ interface VoiceToEntryProps {
 
 const hasSpeechRecognition = typeof window !== "undefined" && 
   (('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window));
+const hasAudioCapture = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 
 const MAX_RECORDING_SECONDS = 300;
 
@@ -53,6 +54,10 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
   const finalPartsRef = useRef<string[]>([]);
+  const liveTranscriptRef = useRef("");
+  const lastSpeechAtRef = useRef<number | null>(null);
+  const audioPeakRef = useRef(0);
+  const finishingRef = useRef(false);
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
@@ -143,7 +148,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
         analyserRef.current.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        setAudioLevel(average / 255);
+        const level = average / 255;
+        audioPeakRef.current = Math.max(audioPeakRef.current, level);
+        setAudioLevel(level);
         animationRef.current = requestAnimationFrame(updateLevel);
       };
       updateLevel();
@@ -152,28 +159,16 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
-  // Core: start speech recognition directly from user gesture
-  const startRecording = useCallback(async () => {
+  const captureBrowserSpeech = useCallback(async (): Promise<boolean> => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast({
-        title: "Non supporté",
-        description: "Utilisez Chrome, Edge ou Safari pour la reconnaissance vocale",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!SpeechRecognition) return false;
 
-    // Clean up previous instance
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch {}
     }
 
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
-    finalPartsRef.current = [];
-    isListeningRef.current = true;
-
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "fr-FR";
@@ -182,32 +177,28 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     recognition.onresult = (event: any) => {
       let interim = "";
       let sessionFinal = "";
-      
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
-        // Pick best alternative
         let bestText = result[0].transcript;
         let bestConfidence = result[0].confidence || 0;
         for (let a = 1; a < result.length; a++) {
           if ((result[a].confidence || 0) > bestConfidence) {
             bestText = result[a].transcript;
-            bestConfidence = result[a].confidence;
+            bestConfidence = result[a].confidence || 0;
           }
         }
-        if (result.isFinal) {
-          sessionFinal += bestText + " ";
-        } else {
-          interim += bestText;
-        }
+        if (result.isFinal) sessionFinal += bestText + " ";
+        else interim += bestText;
       }
-      
       if (sessionFinal.trim()) {
         finalPartsRef.current.push(sessionFinal.trim());
+        lastSpeechAtRef.current = Date.now();
+      } else if (interim.trim()) {
+        lastSpeechAtRef.current = Date.now();
       }
-      
-      const accumulated = finalPartsRef.current.join(" ");
-      const fullText = accumulated + (interim ? " " + interim : "");
-      setLiveTranscript(fullText.trim());
+      const fullText = `${finalPartsRef.current.join(" ")} ${interim}`.trim();
+      liveTranscriptRef.current = fullText;
+      setLiveTranscript(fullText);
     };
 
     recognition.onerror = (event: any) => {
@@ -223,75 +214,95 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         stopTimer();
         cleanupAudio();
       }
-      // For "no-speech", "aborted", "network" — onend will handle restart
     };
 
     recognition.onend = () => {
-      console.log("Speech recognition onend, isListening:", isListeningRef.current);
       if (isListeningRef.current) {
-        // AUTO-RESTART: This is the key fix — browser stops after silence,
-        // but we keep restarting as long as user hasn't clicked stop
         if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
         restartTimeoutRef.current = setTimeout(() => {
-          if (isListeningRef.current && recognitionRef.current) {
-            try {
-              console.log("Auto-restarting speech recognition...");
-              recognitionRef.current.start();
-            } catch (e) {
-              console.warn("Restart failed, retrying in 500ms:", e);
-              setTimeout(() => {
-                if (isListeningRef.current && recognitionRef.current) {
-                  try { recognitionRef.current.start(); } catch {}
-                }
-              }, 500);
-            }
+          if (!isListeningRef.current || !recognitionRef.current) return;
+          try { recognitionRef.current.start(); }
+          catch {
+            restartTimeoutRef.current = setTimeout(() => {
+              if (!isListeningRef.current || !recognitionRef.current) return;
+              try { recognitionRef.current.start(); } catch {}
+            }, 700);
           }
-        }, 200);
+        }, 250);
+        return;
+      }
+
+      if (finishingRef.current) return;
+      finishingRef.current = true;
+      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
+      setIsRecording(false);
+      setAudioLevel(0);
+      stopTimer();
+      cleanupAudio();
+      if (finalText) {
+        setTranscript(finalText);
+        setLiveTranscript("");
+        extractFromTranscript(finalText);
       } else {
-        // User manually stopped — process transcript
-        const finalText = finalPartsRef.current.join(" ").trim();
-        setIsRecording(false);
-        setAudioLevel(0);
-        stopTimer();
-        cleanupAudio();
-        
-        if (finalText) {
-          setTranscript(finalText);
-          setLiveTranscript("");
-          extractFromTranscript(finalText);
-        } else {
-          toast({ 
-            title: "Aucune parole détectée", 
-            description: "Parlez clairement dans le micro et réessayez",
-            variant: "destructive" 
-          });
-        }
+        const heardAudio = audioPeakRef.current > 0.015;
+        toast({
+          title: heardAudio ? "Audio détecté, transcription absente" : "Aucune parole détectée",
+          description: heardAudio
+            ? "Le micro reçoit du son mais le navigateur n'a pas renvoyé de texte. Réessayez en parlant plus près du micro, dans Chrome/Safari, avec la langue française activée."
+            : "Parlez clairement dans le micro et vérifiez les permissions audio.",
+          variant: "destructive",
+        });
       }
     };
 
-    // Start audio visualizer FIRST (needs getUserMedia)
-    await startAudioVisualizer();
-    
-    // Start recognition directly from click handler (user gesture)
     try {
       recognition.start();
-      setIsRecording(true);
-      setTranscript("");
-      setLiveTranscript("");
-      setLastResult(null);
-      startTimer();
-      toast({ title: "🎙️ Enregistrement démarré", description: "Parlez maintenant — l'IA écoute en continu" });
-    } catch (err: any) {
-      console.error("Failed to start recognition:", err);
+      return true;
+    } catch (error) {
+      console.warn("Browser speech start failed:", error);
+      return false;
+    }
+  }, [toast]);
+
+  // Core: start from a real user gesture, keep microphone alive, and never fabricate speech.
+  const startRecording = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
       toast({
-        title: "Erreur micro",
-        description: "Impossible de démarrer l'enregistrement. Vérifiez les permissions.",
+        title: "Microphone non disponible",
+        description: "Votre navigateur ne permet pas l'accès audio. Utilisez Chrome, Edge ou Safari récent.",
         variant: "destructive",
       });
-      isListeningRef.current = false;
-      cleanupAudio();
+      return;
     }
-  }, []);
+
+    finalPartsRef.current = [];
+    liveTranscriptRef.current = "";
+    lastSpeechAtRef.current = null;
+    audioPeakRef.current = 0;
+    finishingRef.current = false;
+    isListeningRef.current = true;
+    setTranscript("");
+    setLiveTranscript("");
+    setLastResult(null);
+
+    await startAudioVisualizer();
+
+    const browserStarted = await captureBrowserSpeech();
+    if (!browserStarted) {
+      toast({
+        title: "Reconnaissance vocale indisponible",
+        description: "Le micro reste ouvert, mais ce navigateur ne fournit pas de transcription directe. Essayez Chrome Android, Edge ou Safari iOS.",
+        variant: "destructive",
+      });
+    }
+
+    setIsRecording(true);
+    startTimer();
+    toast({
+      title: "🎙️ Enregistrement démarré",
+      description: browserStarted ? "Parlez maintenant — transcription réelle en continu" : "Micro actif — aucune donnée fictive ne sera créée",
+    });
+  }, [captureBrowserSpeech, toast]);
 
   const cleanupAudio = () => {
     if (animationRef.current) {
@@ -316,14 +327,40 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       restartTimeoutRef.current = null;
     }
     stopTimer();
+    window.setTimeout(() => {
+      if (finishingRef.current) return;
+      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
+      if (!finalText) return;
+      finishingRef.current = true;
+      setIsRecording(false);
+      cleanupAudio();
+      setTranscript(finalText);
+      setLiveTranscript("");
+      extractFromTranscript(finalText);
+    }, 900);
     
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
       // onend handler will process the transcript
+    } else {
+      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
+      setIsRecording(false);
+      cleanupAudio();
+      if (finalText) {
+        setTranscript(finalText);
+        setLiveTranscript("");
+        extractFromTranscript(finalText);
+      } else {
+        toast({
+          title: audioPeakRef.current > 0.015 ? "Audio détecté, transcription absente" : "Aucune parole détectée",
+          description: "Aucune donnée fictive n'a été créée. Utilisez un navigateur compatible transcription vocale française.",
+          variant: "destructive",
+        });
+      }
     }
     
     setAudioLevel(0);
-  }, []);
+  }, [toast]);
 
   const extractFromTranscript = async (text: string) => {
     setIsProcessing(true);
@@ -470,7 +507,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         {!hasSpeechRecognition && (
           <div className="flex items-center space-x-2 text-warning bg-warning/10 p-3 rounded-lg">
             <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span className="text-xs">Utilisez Chrome, Edge ou Safari pour la reconnaissance vocale.</span>
+            <span className="text-xs">Transcription directe indisponible ici. Chrome Android, Edge ou Safari iOS donnent les meilleurs résultats.</span>
           </div>
         )}
 
@@ -483,7 +520,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
                   key={i}
                   className="w-1 bg-primary rounded-full transition-all duration-75"
                   style={{
-                    height: `${Math.max(4, Math.min(32, audioLevel * 32 + Math.random() * 8))}px`,
+                    height: `${Math.max(4, Math.min(32, audioLevel * (24 + (i % 5) * 2)))}px`,
                     opacity: audioLevel > i * 0.06 ? 1 : 0.2
                   }}
                 />
@@ -493,7 +530,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
 
           <Button
             onClick={toggleRecording}
-            disabled={isProcessing || isSaving || !hasSpeechRecognition}
+            disabled={isProcessing || isSaving || !hasAudioCapture}
             size="lg"
             className={`h-16 w-16 sm:h-20 sm:w-20 rounded-full transition-all duration-300 touch-manipulation ${
               isRecording

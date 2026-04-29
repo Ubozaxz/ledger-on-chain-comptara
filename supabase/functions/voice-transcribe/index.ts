@@ -34,6 +34,72 @@ function sanitizeInput(input: string): string {
   return input.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').replace(/\s{10,}/g, ' ').trim();
 }
 
+const SMALL_NUMBERS: Record<string, number> = {
+  zero: 0, un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9,
+  dix: 10, onze: 11, douze: 12, treize: 13, quatorze: 14, quinze: 15, seize: 16, vingt: 20,
+  trente: 30, quarante: 40, cinquante: 50, soixante: 60, cent: 100, cents: 100,
+};
+
+function parseFrenchNumberWords(input: string): number | null {
+  const words = input.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/-/g, ' ').split(/\s+/);
+  let total = 0;
+  let current = 0;
+  let found = false;
+  for (const word of words) {
+    if (word === 'et') continue;
+    if (SMALL_NUMBERS[word] !== undefined) {
+      const value = SMALL_NUMBERS[word];
+      found = true;
+      if (value === 100) current = Math.max(1, current) * 100;
+      else current += value;
+    } else if (word === 'mille' || word === 'mil') {
+      found = true;
+      total += Math.max(1, current) * 1000;
+      current = 0;
+    } else if (word === 'million' || word === 'millions') {
+      found = true;
+      total += Math.max(1, current) * 1000000;
+      current = 0;
+    }
+  }
+  return found ? total + current : null;
+}
+
+function extractFallbackEntry(text: string): any | null {
+  const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const numericMatch = normalized.match(/(\d{1,3}(?:[\s.,]\d{3})+|\d+(?:[,.]\d+)?)\s*(?:fcfa|f\s*cfa|xof|francs?\s*cfa|francs?|eur|euros?|usd|dollars?|hbar|usdc)?/i);
+  let montant: number | null = null;
+  if (numericMatch) {
+    const raw = numericMatch[1].replace(/\s/g, '').replace(/,(?=\d{1,2}$)/, '.').replace(/\.(?=\d{3}(\D|$))/g, '');
+    montant = Number(raw);
+  }
+  if (!montant || Number.isNaN(montant)) montant = parseFrenchNumberWords(normalized);
+  if (!montant || montant <= 0) return null;
+
+  const devise = /\b(eur|euro|euros)\b/.test(normalized) ? 'EUR'
+    : /\b(usd|dollar|dollars)\b/.test(normalized) ? 'USD'
+    : /\busdc\b/.test(normalized) ? 'USDC'
+    : /\bhbar\b/.test(normalized) ? 'HBAR'
+    : 'XOF';
+  const type = /(vente|encaissement|recette|client|facture client|recu de|reçu de)/.test(normalized) ? 'credit' : 'debit';
+  const category = /(transport|taxi|carburant)/.test(normalized) ? 'Transport'
+    : /(loyer|location)/.test(normalized) ? 'Loyer'
+    : /(telephone|internet|communication)/.test(normalized) ? 'Communication'
+    : /(salaire|paie)/.test(normalized) ? 'Salaires'
+    : /(tva|taxe|impot)/.test(normalized) ? 'Taxes/TVA'
+    : /(vente|client|encaissement)/.test(normalized) ? 'Ventes/Clients'
+    : /(achat|fourniture|fournisseur|facture)/.test(normalized) ? 'Achats/Fournisseurs'
+    : 'Frais généraux';
+  const tvaMatch = normalized.match(/tva\s*(?:a|de)?\s*(\d{1,2}(?:[,.]\d+)?)\s*(?:%|pour\s*cent)?/i);
+  const tvaRate = tvaMatch ? Number(tvaMatch[1].replace(',', '.')) : (/\btva\b/.test(normalized) ? 18 : null);
+  const tiersMatch = text.match(/\b(?:chez|a|à|de|du|aupres de|auprès de)\s+([A-Za-zÀ-ÿ0-9 '&.-]{2,60})/i);
+  const tiers = tiersMatch ? sanitizeInput(tiersMatch[1]).replace(/\s+tva\b.*$/i, '').slice(0, 80) : null;
+  const montantHT = tvaRate ? Number((montant / (1 + tvaRate / 100)).toFixed(2)) : null;
+  const montantTVA = tvaRate && montantHT ? Number((montant - montantHT).toFixed(2)) : null;
+
+  return { montant, devise, description: sanitizeInput(text).slice(0, 500), type, categorie: category, tiers, tvaRate, montantHT, montantTVA };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -70,6 +136,8 @@ serve(async (req) => {
 
     console.log(`Voice extraction for user ${user.id}: "${finalTranscript.slice(0, 100)}..."`);
 
+    const fallbackEntry = extractFallbackEntry(finalTranscript);
+
     const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -77,7 +145,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-3-flash-preview",
         messages: [
           {
             role: "system",
@@ -129,7 +197,7 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
             content: `Transcription vocale à analyser:\n"${finalTranscript}"`
           }
         ],
-        temperature: 0.05,
+        temperature: 0.02,
         max_tokens: 800,
       }),
     });
@@ -140,7 +208,7 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
       if (extractionResponse.status === 429) {
         return new Response(JSON.stringify({ 
           transcription: finalTranscript,
-          entry: null,
+          entry: fallbackEntry,
           error: "Limite IA atteinte. Transcription disponible mais extraction automatique échouée." 
         }), {
           status: 200,
@@ -189,6 +257,8 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
     } catch (e) {
       console.error("JSON parse error:", e);
     }
+
+    if (!entry && fallbackEntry) entry = fallbackEntry;
 
     console.log("Final result:", { transcription: finalTranscript, entry });
 

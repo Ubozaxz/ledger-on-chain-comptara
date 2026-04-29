@@ -15,6 +15,9 @@ export interface AccountingEntry {
   tx_hash: string;
   description?: string;
   category?: string;
+  tva_rate?: number | null;
+  montant_ht?: number | null;
+  montant_tva?: number | null;
   created_at: string;
   updated_at: string;
 }
