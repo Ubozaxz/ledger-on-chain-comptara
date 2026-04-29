@@ -136,6 +136,8 @@ serve(async (req) => {
 
     console.log(`Voice extraction for user ${user.id}: "${finalTranscript.slice(0, 100)}..."`);
 
+    const fallbackEntry = extractFallbackEntry(finalTranscript);
+
     const extractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -143,7 +145,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-3-flash-preview",
         messages: [
           {
             role: "system",
@@ -195,7 +197,7 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
             content: `Transcription vocale à analyser:\n"${finalTranscript}"`
           }
         ],
-        temperature: 0.05,
+        temperature: 0.02,
         max_tokens: 800,
       }),
     });
@@ -206,7 +208,7 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
       if (extractionResponse.status === 429) {
         return new Response(JSON.stringify({ 
           transcription: finalTranscript,
-          entry: null,
+          entry: fallbackEntry,
           error: "Limite IA atteinte. Transcription disponible mais extraction automatique échouée." 
         }), {
           status: 200,
@@ -255,6 +257,8 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
     } catch (e) {
       console.error("JSON parse error:", e);
     }
+
+    if (!entry && fallbackEntry) entry = fallbackEntry;
 
     console.log("Final result:", { transcription: finalTranscript, entry });
 
