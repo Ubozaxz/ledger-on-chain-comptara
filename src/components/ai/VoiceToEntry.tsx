@@ -30,6 +30,7 @@ interface VoiceToEntryProps {
 
 const hasSpeechRecognition = typeof window !== "undefined" && 
   (('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window));
+const hasAudioCapture = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 
 const MAX_RECORDING_SECONDS = 300;
 
@@ -495,7 +496,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         {!hasSpeechRecognition && (
           <div className="flex items-center space-x-2 text-warning bg-warning/10 p-3 rounded-lg">
             <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span className="text-xs">Utilisez Chrome, Edge ou Safari pour la reconnaissance vocale.</span>
+            <span className="text-xs">Transcription directe indisponible ici. Chrome Android, Edge ou Safari iOS donnent les meilleurs résultats.</span>
           </div>
         )}
 
@@ -508,7 +509,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
                   key={i}
                   className="w-1 bg-primary rounded-full transition-all duration-75"
                   style={{
-                    height: `${Math.max(4, Math.min(32, audioLevel * 32 + Math.random() * 8))}px`,
+                    height: `${Math.max(4, Math.min(32, audioLevel * (24 + (i % 5) * 2)))}px`,
                     opacity: audioLevel > i * 0.06 ? 1 : 0.2
                   }}
                 />
@@ -518,7 +519,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
 
           <Button
             onClick={toggleRecording}
-            disabled={isProcessing || isSaving || !hasSpeechRecognition}
+            disabled={isProcessing || isSaving || !hasAudioCapture}
             size="lg"
             className={`h-16 w-16 sm:h-20 sm:w-20 rounded-full transition-all duration-300 touch-manipulation ${
               isRecording
