@@ -330,10 +330,25 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
       // onend handler will process the transcript
+    } else {
+      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
+      setIsRecording(false);
+      cleanupAudio();
+      if (finalText) {
+        setTranscript(finalText);
+        setLiveTranscript("");
+        extractFromTranscript(finalText);
+      } else {
+        toast({
+          title: audioPeakRef.current > 0.015 ? "Audio détecté, transcription absente" : "Aucune parole détectée",
+          description: "Aucune donnée fictive n'a été créée. Utilisez un navigateur compatible transcription vocale française.",
+          variant: "destructive",
+        });
+      }
     }
     
     setAudioLevel(0);
-  }, []);
+  }, [toast]);
 
   const extractFromTranscript = async (text: string) => {
     setIsProcessing(true);
