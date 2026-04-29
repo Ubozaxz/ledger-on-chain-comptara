@@ -393,19 +393,10 @@ const Index = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
               <VoiceToEntry 
                 onEntryExtracted={(entry) => {
-                  // Auto-save if montant is present
-                  if (entry.montant) {
-                    handleEntryAdded({
-                      date: new Date().toISOString().split('T')[0],
-                      libelle: entry.description || 'Écriture vocale',
-                      debit: entry.type === 'debit' ? entry.categorie || 'Divers' : '',
-                      credit: entry.type === 'credit' ? entry.categorie || 'Divers' : '',
-                      montant: entry.montant,
-                      devise: entry.devise || 'XOF',
-                      txHash: entry.txHash || '',
-                      description: entry.description,
-                    });
-                  }
+                  toast({
+                    title: "Dictée analysée",
+                    description: `${entry.montant?.toLocaleString('fr-FR')} ${entry.devise || 'XOF'} détecté`,
+                  });
                 }}
                 onInsertToJournal={(entry) => {
                   // Navigate to journal tab and show pre-filled data
