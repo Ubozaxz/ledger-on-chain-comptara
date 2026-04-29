@@ -155,6 +155,102 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
+  const captureBrowserSpeech = useCallback(async (): Promise<boolean> => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return false;
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch {}
+    }
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "fr-FR";
+    recognition.maxAlternatives = 3;
+
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      let sessionFinal = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        let bestText = result[0].transcript;
+        let bestConfidence = result[0].confidence || 0;
+        for (let a = 1; a < result.length; a++) {
+          if ((result[a].confidence || 0) > bestConfidence) {
+            bestText = result[a].transcript;
+            bestConfidence = result[a].confidence || 0;
+          }
+        }
+        if (result.isFinal) sessionFinal += bestText + " ";
+        else interim += bestText;
+      }
+      if (sessionFinal.trim()) {
+        finalPartsRef.current.push(sessionFinal.trim());
+        lastSpeechAtRef.current = Date.now();
+      } else if (interim.trim()) {
+        lastSpeechAtRef.current = Date.now();
+      }
+      const fullText = `${finalPartsRef.current.join(" ")} ${interim}`.trim();
+      liveTranscriptRef.current = fullText;
+      setLiveTranscript(fullText);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.warn("Speech recognition error:", event.error);
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        toast({
+          title: "Microphone non autorisé",
+          description: "Autorisez l'accès au microphone dans les paramètres du navigateur",
+          variant: "destructive",
+        });
+        isListeningRef.current = false;
+        setIsRecording(false);
+        stopTimer();
+        cleanupAudio();
+      }
+    };
+
+    recognition.onend = () => {
+      if (isListeningRef.current) {
+        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = setTimeout(() => {
+          if (!isListeningRef.current || !recognitionRef.current) return;
+          try { recognitionRef.current.start(); }
+          catch {
+            restartTimeoutRef.current = setTimeout(() => {
+              if (!isListeningRef.current || !recognitionRef.current) return;
+              try { recognitionRef.current.start(); } catch {}
+            }, 700);
+          }
+        }, 250);
+        return;
+      }
+
+      if (finishingRef.current) return;
+      finishingRef.current = true;
+      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
+      setIsRecording(false);
+      setAudioLevel(0);
+      stopTimer();
+      cleanupAudio();
+      if (finalText) {
+        setTranscript(finalText);
+        setLiveTranscript("");
+        extractFromTranscript(finalText);
+      }
+    };
+
+    try {
+      recognition.start();
+      return true;
+    } catch (error) {
+      console.warn("Browser speech start failed:", error);
+      return false;
+    }
+  }, [toast]);
+
   // Core: start speech recognition directly from user gesture
   const startRecording = useCallback(async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
