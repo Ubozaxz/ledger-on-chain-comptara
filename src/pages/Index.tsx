@@ -84,7 +84,10 @@ const Index = () => {
       devise: entry.devise || 'XOF',
       tx_hash: entry.txHash || '',
       description: entry.description,
-      category: entry.category,
+      category: entry.category || entry.categorie,
+      tva_rate: entry.tva_rate ?? entry.tvaRate ?? null,
+      montant_ht: entry.montant_ht ?? entry.montantHT ?? null,
+      montant_tva: entry.montant_tva ?? entry.montantTVA ?? null,
     });
     toast({ title: 'Écriture enregistrée', description: 'Sauvegardée dans le Cloud' });
   };
