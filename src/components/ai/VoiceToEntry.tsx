@@ -55,6 +55,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const finalPartsRef = useRef<string[]>([]);
   const liveTranscriptRef = useRef("");
   const lastSpeechAtRef = useRef<number | null>(null);
+  const audioPeakRef = useRef(0);
   const finishingRef = useRef(false);
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
@@ -146,7 +147,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
         analyserRef.current.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        setAudioLevel(average / 255);
+        const level = average / 255;
+        audioPeakRef.current = Math.max(audioPeakRef.current, level);
+        setAudioLevel(level);
         animationRef.current = requestAnimationFrame(updateLevel);
       };
       updateLevel();
