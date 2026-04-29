@@ -242,6 +242,15 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         setTranscript(finalText);
         setLiveTranscript("");
         extractFromTranscript(finalText);
+      } else {
+        const heardAudio = audioPeakRef.current > 0.015;
+        toast({
+          title: heardAudio ? "Audio détecté, transcription absente" : "Aucune parole détectée",
+          description: heardAudio
+            ? "Le micro reçoit du son mais le navigateur n'a pas renvoyé de texte. Réessayez en parlant plus près du micro, dans Chrome/Safari, avec la langue française activée."
+            : "Parlez clairement dans le micro et vérifiez les permissions audio.",
+          variant: "destructive",
+        });
       }
     };
 
@@ -268,6 +277,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     finalPartsRef.current = [];
     liveTranscriptRef.current = "";
     lastSpeechAtRef.current = null;
+    audioPeakRef.current = 0;
     finishingRef.current = false;
     isListeningRef.current = true;
     setTranscript("");
