@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, Shield, LogOut } from "lucide-react";
+import { Wallet, LogOut } from "lucide-react";
+import comptaraLogo from "@/assets/comptara-logo.jpg";
 
 interface HeaderProps {
   isConnected: boolean;
@@ -18,9 +19,11 @@ export const Header = ({ isConnected, walletAddress, onConnect, onDisconnect }: 
       <div className="px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
         <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
           <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 bg-gradient-primary rounded-lg flex items-center justify-center flex-shrink-0">
-              <Shield className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
-            </div>
+            <img
+              src={comptaraLogo}
+              alt="Comptara logo"
+              className="h-9 w-9 sm:h-11 sm:w-11 rounded-lg object-cover flex-shrink-0 ring-1 ring-primary/30 shadow-md"
+            />
             <div className="min-w-0">
               <h1 className="text-lg sm:text-2xl font-bold text-gradient">comptara</h1>
               <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">Comptabilité blockchain</p>
