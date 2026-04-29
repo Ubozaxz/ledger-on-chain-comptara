@@ -480,41 +480,40 @@ const Index = () => {
                     </Button>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 md:space-y-4 p-3 md:p-6">
+                <CardContent className="space-y-3 md:space-y-4 p-3 md:p-6 overflow-hidden">
                   {payments.map((payment) => (
                     <Card key={payment.id} className="border border-border/50 hover:shadow-lg transition-all duration-300">
                       <CardContent className="p-3 md:p-4">
-                        <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+                        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-start gap-3 min-w-0">
                           <div className="space-y-1 md:space-y-2 min-w-0 flex-1">
                             <h4 className="font-medium text-foreground text-sm md:text-base truncate">{payment.objet}</h4>
-                            <p className="text-xs md:text-sm text-muted-foreground">
+                            <p className="text-xs md:text-sm text-muted-foreground break-words">
                               {payment.type === 'paiement' ? 'Paiement vers' : 'Encaissement de'}: 
-                              <span className="font-mono ml-1">{payment.destinataire.slice(0, 12)}...</span>
+                              <span className="font-mono ml-1 break-all">{payment.destinataire.slice(0, 18)}{payment.destinataire.length > 18 ? '...' : ''}</span>
                             </p>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 min-w-0">
                               <Hash className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                              <a
-                                href={`https://hashscan.io/testnet/transaction/${payment.tx_hash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs font-mono text-primary hover:underline truncate"
-                              >
-                                {payment.tx_hash}
-                              </a>
+                              {payment.tx_hash ? (
+                                <a href={`https://hashscan.io/testnet/transaction/${payment.tx_hash}`} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-primary hover:underline truncate min-w-0">
+                                  {payment.tx_hash}
+                                </a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Pas de hash blockchain</span>
+                              )}
                             </div>
                           </div>
-                          <div className="text-right space-y-1 md:space-y-2 flex-shrink-0">
-                            <p className="font-semibold text-base md:text-lg text-foreground">
+                          <div className="text-left sm:text-right space-y-2 flex-shrink-0 sm:max-w-[180px]">
+                            <p className="font-semibold text-base md:text-lg text-foreground break-words">
                               {payment.montant} {payment.devise}
                             </p>
                             <Badge variant="default" className="bg-success/10 text-success border-success/20 text-xs">
                               Confirmé
                             </Badge>
-                            <div className="flex space-x-1">
+                            <div className="flex gap-2 w-full sm:justify-end">
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-7 text-xs"
+                                className="h-9 text-xs flex-1 sm:flex-none touch-manipulation"
                                 onClick={async () => {
                                   try {
                                     const { generatePaymentProofPDF } = await import("@/lib/pdf-generator");
