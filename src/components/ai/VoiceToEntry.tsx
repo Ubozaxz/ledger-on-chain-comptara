@@ -327,6 +327,17 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       restartTimeoutRef.current = null;
     }
     stopTimer();
+    window.setTimeout(() => {
+      if (finishingRef.current) return;
+      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
+      if (!finalText) return;
+      finishingRef.current = true;
+      setIsRecording(false);
+      cleanupAudio();
+      setTranscript(finalText);
+      setLiveTranscript("");
+      extractFromTranscript(finalText);
+    }, 900);
     
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
