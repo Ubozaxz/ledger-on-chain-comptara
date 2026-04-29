@@ -175,6 +175,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
     finalPartsRef.current = [];
+      liveTranscriptRef.current = "";
+      lastSpeechAtRef.current = null;
+      finishingRef.current = false;
     isListeningRef.current = true;
 
     recognition.continuous = true;
@@ -206,10 +209,14 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       
       if (sessionFinal.trim()) {
         finalPartsRef.current.push(sessionFinal.trim());
+        lastSpeechAtRef.current = Date.now();
+      } else if (interim.trim()) {
+        lastSpeechAtRef.current = Date.now();
       }
       
       const accumulated = finalPartsRef.current.join(" ");
       const fullText = accumulated + (interim ? " " + interim : "");
+      liveTranscriptRef.current = fullText.trim();
       setLiveTranscript(fullText.trim());
     };
 
@@ -252,7 +259,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
         }, 200);
       } else {
         // User manually stopped — process transcript
-        const finalText = finalPartsRef.current.join(" ").trim();
+        if (finishingRef.current) return;
+        finishingRef.current = true;
+        const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
         setIsRecording(false);
         setAudioLevel(0);
         stopTimer();
