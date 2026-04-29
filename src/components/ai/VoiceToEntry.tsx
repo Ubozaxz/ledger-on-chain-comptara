@@ -53,6 +53,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
   const finalPartsRef = useRef<string[]>([]);
+  const liveTranscriptRef = useRef("");
+  const lastSpeechAtRef = useRef<number | null>(null);
+  const finishingRef = useRef(false);
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
