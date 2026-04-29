@@ -26,7 +26,7 @@ export const FileAnalyzer = () => {
       const found = Object.keys(row).find(k => keys.some(key => k.toLowerCase().includes(key)));
       return found ? row[found] : undefined;
     };
-    const toNumber = (value: any) => Number(String(value ?? '').replace(/\s/g, '').replace(',', '.').replace(/[^[0-9.\-]/g, '')) || 0;
+    const toNumber = (value: any) => Number(String(value ?? '').replace(/\s/g, '').replace(',', '.').replace(/[^0-9.-]/g, '')) || 0;
     const issues: string[] = [];
     let debitTotal = 0, creditTotal = 0, amountTotal = 0;
     const seen = new Map<string, number>();
