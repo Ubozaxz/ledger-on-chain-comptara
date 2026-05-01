@@ -238,6 +238,10 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pb-20">
+      {/* Full-screen offline overlay (always reachable, mobile-first) */}
+      {!isOnline && (
+        <OfflineScreen pendingSync={pendingSync} onRetry={() => { refreshData(); syncOfflineQueue(); }} />
+      )}
       <WalletConnector 
         isConnected={isConnected}
         walletAddress={walletAddress}
