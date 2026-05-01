@@ -79,8 +79,8 @@ const Index = () => {
     await addEntry({
       date: entry.date || new Date().toISOString().split('T')[0],
       libelle: entry.libelle || entry.description || 'Écriture comptable',
-      debit: entry.debit || '',
-      credit: entry.credit || '',
+      debit: entry.debit || entry.compteDebit || '',
+      credit: entry.credit || entry.compteCredit || '',
       montant: parseFloat(entry.montant) || 0,
       devise: entry.devise || 'XOF',
       tx_hash: entry.txHash || '',
