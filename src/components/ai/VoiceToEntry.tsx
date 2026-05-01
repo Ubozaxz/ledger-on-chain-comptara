@@ -20,6 +20,10 @@ interface ExtractedEntry {
   tvaRate?: number;
   montantHT?: number;
   montantTVA?: number;
+  date?: string;
+  libelle?: string;
+  compteDebit?: string;
+  compteCredit?: string;
 }
 
 interface VoiceToEntryProps {
@@ -390,6 +394,10 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
           tvaRate: data.entry.tvaRate,
           montantHT: data.entry.montantHT,
           montantTVA: data.entry.montantTVA,
+          date: data.entry.date,
+          libelle: data.entry.libelle || data.entry.description,
+          compteDebit: data.entry.compteDebit,
+          compteCredit: data.entry.compteCredit,
         };
         setLastResult(entry);
         onEntryExtracted(entry);
