@@ -13,6 +13,7 @@ import { FileAnalyzer } from "@/components/ai/FileAnalyzer";
 import { AIChat } from "@/components/ai/AIChat";
 import { SmartSuggestions } from "@/components/ai/SmartSuggestions";
 import { StatusBanner } from "@/components/ui/status-banner";
+import { OfflineScreen } from "@/components/ui/offline-screen";
 import { useCloudData } from "@/hooks/useCloudData";
 import { useAuth } from "@/hooks/useAuth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
