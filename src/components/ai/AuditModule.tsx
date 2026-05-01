@@ -417,7 +417,7 @@ export const AuditModule = ({ entries, payments }: AuditModuleProps) => {
                     Lire le rapport complet
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="w-[95vw] max-w-3xl h-[85vh] flex flex-col p-0 gap-0">
+                <DialogContent className="w-screen h-[100dvh] max-w-none rounded-none sm:w-[95vw] sm:max-w-3xl sm:h-[85vh] sm:rounded-lg flex flex-col p-0 gap-0">
                   <DialogHeader className="p-3 sm:p-4 pb-2 border-b flex-shrink-0">
                     <DialogTitle className="flex items-center space-x-2 text-sm sm:text-base">
                       <ShieldCheck className="h-5 w-5 text-primary" />
