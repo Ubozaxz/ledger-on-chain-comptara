@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { FileSpreadsheet, Upload, Loader2, Send, X, FileText, AlertTriangle, CheckCircle, Lightbulb } from "lucide-react";
+import { FileSpreadsheet, Upload, Loader2, Send, X, FileText, AlertTriangle, CheckCircle, Lightbulb, Copy, Wrench } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ExcelJS from "exceljs";
 import ReactMarkdown from "react-markdown";
@@ -18,6 +18,7 @@ export const FileAnalyzer = () => {
   const [question, setQuestion] = useState("");
   const [conversation, setConversation] = useState<Array<{ role: string; content: string }>>([]);
   const [autoAnalysisDone, setAutoAnalysisDone] = useState(false);
+  const [corrections, setCorrections] = useState<Array<{ ligne: number | string; champ: string; avant: string; apres: string; raison: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -28,6 +29,7 @@ export const FileAnalyzer = () => {
     };
     const toNumber = (value: any) => Number(String(value ?? '').replace(/\s/g, '').replace(',', '.').replace(/[^0-9.-]/g, '')) || 0;
     const issues: string[] = [];
+    const fixes: Array<{ ligne: number | string; champ: string; avant: string; apres: string; raison: string }> = [];
     let debitTotal = 0, creditTotal = 0, amountTotal = 0;
     const seen = new Map<string, number>();
 
@@ -41,18 +43,42 @@ export const FileAnalyzer = () => {
       const desc = String(getValue(row, ['libellé', 'libelle', 'description', 'objet']) ?? '');
       const date = String(getValue(row, ['date']) ?? '');
       debitTotal += debit; creditTotal += credit; amountTotal += amount;
-      if (!date) issues.push(`Ligne ${line}: date manquante → renseigner la date de pièce.`);
-      if (!desc.trim()) issues.push(`Ligne ${line}: libellé manquant → ajouter une description comptable.`);
-      if (debit && credit && Math.abs(debit - credit) > 0.01) issues.push(`Ligne ${line}: débit ${debit} ≠ crédit ${credit} → passer une correction de ${Math.abs(debit-credit).toLocaleString('fr-FR')} FCFA.`);
-      if (!debit && !credit && !amount) issues.push(`Ligne ${line}: aucun montant détecté → compléter débit/crédit ou montant TTC.`);
-      if (ht && tva && amount && Math.abs((ht + tva) - amount) > 1) issues.push(`Ligne ${line}: HT+TVA ≠ TTC → corriger TTC à ${(ht+tva).toLocaleString('fr-FR')} FCFA ou recalculer la TVA.`);
+      if (!date) {
+        issues.push(`Ligne ${line}: date manquante → renseigner la date de pièce.`);
+        fixes.push({ ligne: line, champ: "Date", avant: "(vide)", apres: new Date().toISOString().split('T')[0], raison: "Date obligatoire pour l'écriture" });
+      }
+      if (!desc.trim()) {
+        issues.push(`Ligne ${line}: libellé manquant → ajouter une description comptable.`);
+        fixes.push({ ligne: line, champ: "Libellé", avant: "(vide)", apres: "Opération à qualifier", raison: "Libellé obligatoire" });
+      }
+      if (debit && credit && Math.abs(debit - credit) > 0.01) {
+        issues.push(`Ligne ${line}: débit ${debit} ≠ crédit ${credit} → passer une correction de ${Math.abs(debit-credit).toLocaleString('fr-FR')} FCFA.`);
+        const corrected = Math.max(debit, credit);
+        fixes.push({ ligne: line, champ: "Débit/Crédit", avant: `D=${debit} / C=${credit}`, apres: `D=${corrected} / C=${corrected}`, raison: "Égaliser débit et crédit (partie double)" });
+      }
+      if (!debit && !credit && !amount) {
+        issues.push(`Ligne ${line}: aucun montant détecté → compléter débit/crédit ou montant TTC.`);
+        fixes.push({ ligne: line, champ: "Montant", avant: "0", apres: "(à saisir)", raison: "Aucun montant détecté" });
+      }
+      if (ht && tva && amount && Math.abs((ht + tva) - amount) > 1) {
+        issues.push(`Ligne ${line}: HT+TVA ≠ TTC → corriger TTC à ${(ht+tva).toLocaleString('fr-FR')} FCFA ou recalculer la TVA.`);
+        fixes.push({ ligne: line, champ: "TTC", avant: String(amount), apres: String(ht + tva), raison: "TTC = HT + TVA" });
+      }
       const key = `${date}|${desc.toLowerCase().trim()}|${debit || credit || amount}`;
-      if (seen.has(key)) issues.push(`Ligne ${line}: doublon probable avec ligne ${seen.get(key)} → supprimer ou justifier la double saisie.`);
+      if (seen.has(key)) {
+        issues.push(`Ligne ${line}: doublon probable avec ligne ${seen.get(key)} → supprimer ou justifier la double saisie.`);
+        fixes.push({ ligne: line, champ: "Doublon", avant: `Identique à ligne ${seen.get(key)}`, apres: "Supprimer ou justifier", raison: "Doublon détecté" });
+      }
       else seen.set(key, line);
     });
 
     const gap = debitTotal - creditTotal;
-    if (Math.abs(gap) > 0.01) issues.unshift(`Balance fichier déséquilibrée: débit ${debitTotal.toLocaleString('fr-FR')} FCFA vs crédit ${creditTotal.toLocaleString('fr-FR')} FCFA, écart ${gap.toLocaleString('fr-FR')} FCFA.`);
+    if (Math.abs(gap) > 0.01) {
+      issues.unshift(`Balance fichier déséquilibrée: débit ${debitTotal.toLocaleString('fr-FR')} FCFA vs crédit ${creditTotal.toLocaleString('fr-FR')} FCFA, écart ${gap.toLocaleString('fr-FR')} FCFA.`);
+      fixes.unshift({ ligne: "Balance", champ: "Écart D-C", avant: gap.toLocaleString('fr-FR'), apres: "0", raison: "Passer une écriture de régularisation OHADA pour solder l'écart" });
+    }
+
+    setCorrections(fixes);
 
     return `## Pré-audit déterministe sur données réelles\n- Lignes analysées: ${rows.length}\n- Total débit: ${debitTotal.toLocaleString('fr-FR')} FCFA\n- Total crédit: ${creditTotal.toLocaleString('fr-FR')} FCFA\n- Total montants: ${amountTotal.toLocaleString('fr-FR')} FCFA\n- Problèmes détectés automatiquement: ${issues.length}\n\n${issues.slice(0, 40).map((i, n) => `${n + 1}. ${i}`).join('\n') || 'Aucune anomalie bloquante détectée par le pré-audit.'}\n\nPour chaque problème, donne une correction prête à copier-coller (cellule/ligne, valeur corrigée, écriture de régularisation OHADA si utile).`;
   };
@@ -295,6 +321,7 @@ export const FileAnalyzer = () => {
     setFileName(null);
     setConversation([]);
     setAutoAnalysisDone(false);
+    setCorrections([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -393,6 +420,69 @@ export const FileAnalyzer = () => {
 
             {/* Conversation - Main area */}
             {conversation.length > 0 && (
+              <>
+              {corrections.length > 0 && (
+                <div className="rounded-lg border border-warning/30 bg-warning/5 p-2.5 sm:p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Wrench className="h-4 w-4 text-warning flex-shrink-0" />
+                      <span className="text-xs sm:text-sm font-semibold truncate">
+                        Corrections proposées ({corrections.length})
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-[10px] sm:text-xs touch-manipulation"
+                      onClick={() => {
+                        const text = corrections
+                          .map(c => `Ligne ${c.ligne} | ${c.champ} | Avant: ${c.avant} | Après: ${c.apres} | ${c.raison}`)
+                          .join('\n');
+                        navigator.clipboard.writeText(text);
+                        toast({ title: "Copié", description: "Toutes les corrections copiées" });
+                      }}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Tout copier
+                    </Button>
+                  </div>
+                  <ScrollArea className="h-44 sm:h-56 pr-2">
+                    <div className="space-y-1.5">
+                      {corrections.map((c, i) => {
+                        const line = `Ligne ${c.ligne} → ${c.champ}: ${c.apres}`;
+                        return (
+                          <div key={i} className="rounded-md border bg-background/60 p-2 text-[11px] sm:text-xs flex items-start gap-2">
+                            <div className="flex-1 min-w-0 space-y-0.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <Badge variant="outline" className="text-[9px] h-4 px-1">L{c.ligne}</Badge>
+                                <span className="font-medium truncate">{c.champ}</span>
+                              </div>
+                              <p className="text-muted-foreground break-words">
+                                <span className="line-through opacity-60">{c.avant}</span>
+                                {" → "}
+                                <span className="text-success font-mono break-all">{c.apres}</span>
+                              </p>
+                              <p className="text-[10px] text-muted-foreground/80 break-words">{c.raison}</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 flex-shrink-0 touch-manipulation"
+                              onClick={() => {
+                                navigator.clipboard.writeText(line);
+                                toast({ title: "Copié", description: line });
+                              }}
+                              aria-label="Copier la correction"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
               <ScrollArea className="h-[300px] sm:h-[400px] rounded-lg border bg-muted/20 p-3 sm:p-4">
                 <div className="space-y-4">
                   {conversation.map((msg, idx) => (
@@ -427,6 +517,7 @@ export const FileAnalyzer = () => {
                   )}
                 </div>
               </ScrollArea>
+              </>
             )}
 
             {/* Question Input */}

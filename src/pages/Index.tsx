@@ -13,6 +13,7 @@ import { FileAnalyzer } from "@/components/ai/FileAnalyzer";
 import { AIChat } from "@/components/ai/AIChat";
 import { SmartSuggestions } from "@/components/ai/SmartSuggestions";
 import { StatusBanner } from "@/components/ui/status-banner";
+import { OfflineScreen } from "@/components/ui/offline-screen";
 import { useCloudData } from "@/hooks/useCloudData";
 import { useAuth } from "@/hooks/useAuth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -78,8 +79,8 @@ const Index = () => {
     await addEntry({
       date: entry.date || new Date().toISOString().split('T')[0],
       libelle: entry.libelle || entry.description || 'Écriture comptable',
-      debit: entry.debit || '',
-      credit: entry.credit || '',
+      debit: entry.debit || entry.compteDebit || '',
+      credit: entry.credit || entry.compteCredit || '',
       montant: parseFloat(entry.montant) || 0,
       devise: entry.devise || 'XOF',
       tx_hash: entry.txHash || '',
@@ -237,6 +238,10 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pb-20">
+      {/* Full-screen offline overlay (always reachable, mobile-first) */}
+      {!isOnline && (
+        <OfflineScreen pendingSync={pendingSync} onRetry={() => { refreshData(); syncOfflineQueue(); }} />
+      )}
       <WalletConnector 
         isConnected={isConnected}
         walletAddress={walletAddress}
