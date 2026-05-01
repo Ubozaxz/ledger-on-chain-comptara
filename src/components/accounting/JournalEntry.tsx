@@ -265,14 +265,20 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-xs text-muted-foreground">TVA</p>
-                  <p className="text-lg font-bold text-primary">{formData.montantTVA || "0.00"} {formData.devise}</p>
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="bg-muted/50 rounded-lg p-2.5 sm:p-3 text-center min-w-0">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">TVA</p>
+                  <p className="text-sm sm:text-lg font-bold text-primary break-all leading-tight">
+                    {formData.montantTVA || "0.00"}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">{formData.devise}</p>
                 </div>
-                <div className="bg-success/10 rounded-lg p-3 text-center">
-                  <p className="text-xs text-muted-foreground">TTC</p>
-                  <p className="text-lg font-bold text-success">{formData.montant || "0.00"} {formData.devise}</p>
+                <div className="bg-success/10 rounded-lg p-2.5 sm:p-3 text-center min-w-0">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">TTC</p>
+                  <p className="text-sm sm:text-lg font-bold text-success break-all leading-tight">
+                    {formData.montant || "0.00"}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">{formData.devise}</p>
                 </div>
               </div>
             </div>
