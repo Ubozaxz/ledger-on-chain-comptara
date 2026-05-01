@@ -420,6 +420,69 @@ export const FileAnalyzer = () => {
 
             {/* Conversation - Main area */}
             {conversation.length > 0 && (
+              <>
+              {corrections.length > 0 && (
+                <div className="rounded-lg border border-warning/30 bg-warning/5 p-2.5 sm:p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Wrench className="h-4 w-4 text-warning flex-shrink-0" />
+                      <span className="text-xs sm:text-sm font-semibold truncate">
+                        Corrections proposées ({corrections.length})
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-[10px] sm:text-xs touch-manipulation"
+                      onClick={() => {
+                        const text = corrections
+                          .map(c => `Ligne ${c.ligne} | ${c.champ} | Avant: ${c.avant} | Après: ${c.apres} | ${c.raison}`)
+                          .join('\n');
+                        navigator.clipboard.writeText(text);
+                        toast({ title: "Copié", description: "Toutes les corrections copiées" });
+                      }}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Tout copier
+                    </Button>
+                  </div>
+                  <ScrollArea className="h-44 sm:h-56 pr-2">
+                    <div className="space-y-1.5">
+                      {corrections.map((c, i) => {
+                        const line = `Ligne ${c.ligne} → ${c.champ}: ${c.apres}`;
+                        return (
+                          <div key={i} className="rounded-md border bg-background/60 p-2 text-[11px] sm:text-xs flex items-start gap-2">
+                            <div className="flex-1 min-w-0 space-y-0.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <Badge variant="outline" className="text-[9px] h-4 px-1">L{c.ligne}</Badge>
+                                <span className="font-medium truncate">{c.champ}</span>
+                              </div>
+                              <p className="text-muted-foreground break-words">
+                                <span className="line-through opacity-60">{c.avant}</span>
+                                {" → "}
+                                <span className="text-success font-mono break-all">{c.apres}</span>
+                              </p>
+                              <p className="text-[10px] text-muted-foreground/80 break-words">{c.raison}</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 flex-shrink-0 touch-manipulation"
+                              onClick={() => {
+                                navigator.clipboard.writeText(line);
+                                toast({ title: "Copié", description: line });
+                              }}
+                              aria-label="Copier la correction"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
               <ScrollArea className="h-[300px] sm:h-[400px] rounded-lg border bg-muted/20 p-3 sm:p-4">
                 <div className="space-y-4">
                   {conversation.map((msg, idx) => (
@@ -454,6 +517,7 @@ export const FileAnalyzer = () => {
                   )}
                 </div>
               </ScrollArea>
+              </>
             )}
 
             {/* Question Input */}
