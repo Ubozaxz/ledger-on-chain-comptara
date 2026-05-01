@@ -97,7 +97,31 @@ function extractFallbackEntry(text: string): any | null {
   const montantHT = tvaRate ? Number((montant / (1 + tvaRate / 100)).toFixed(2)) : null;
   const montantTVA = tvaRate && montantHT ? Number((montant - montantHT).toFixed(2)) : null;
 
-  return { montant, devise, description: sanitizeInput(text).slice(0, 500), type, categorie: category, tiers, tvaRate, montantHT, montantTVA };
+  // Date: try to detect dd/mm/yyyy or ISO date; default to today
+  const dateMatch = text.match(/\b(\d{1,2})[\/\-\s](\d{1,2})[\/\-\s](\d{2,4})\b/);
+  let date = new Date().toISOString().split('T')[0];
+  if (dateMatch) {
+    let [_, d, m, y] = dateMatch;
+    if (y.length === 2) y = '20' + y;
+    date = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  // Default OHADA/SYSCOA accounts based on category and type
+  const accountByCategory: Record<string, { debit: string; credit: string }> = {
+    'Achats/Fournisseurs': { debit: '601000 - Achats', credit: '401000 - Fournisseurs' },
+    'Ventes/Clients':      { debit: '411000 - Clients', credit: '701000 - Ventes' },
+    'Transport':           { debit: '624000 - Transports', credit: '521000 - Banque' },
+    'Loyer':               { debit: '622000 - Locations', credit: '521000 - Banque' },
+    'Communication':       { debit: '626000 - Frais postaux/télécoms', credit: '521000 - Banque' },
+    'Salaires':            { debit: '661000 - Charges de personnel', credit: '422000 - Personnel' },
+    'Taxes/TVA':           { debit: '445660 - TVA déductible', credit: '521000 - Banque' },
+    'Frais généraux':      { debit: '628000 - Divers services extérieurs', credit: '521000 - Banque' },
+  };
+  const accounts = accountByCategory[category] || accountByCategory['Frais généraux'];
+  const compteDebit = type === 'credit' ? accounts.credit : accounts.debit;
+  const compteCredit = type === 'credit' ? accounts.debit : accounts.credit;
+
+  return { montant, devise, description: sanitizeInput(text).slice(0, 500), type, categorie: category, tiers, tvaRate, montantHT, montantTVA, date, compteDebit, compteCredit, libelle: sanitizeInput(text).slice(0, 200) };
 }
 
 serve(async (req) => {
@@ -189,8 +213,23 @@ Si TVA mentionnée et montant TTC donné:
 - montantHT = montant / (1 + tvaRate/100)
 - montantTVA = montant - montantHT
 
+COMPTES OHADA/SYSCOA par défaut (à proposer dans compteDebit/compteCredit):
+- Achat de fournitures/marchandises: D 601000 Achats / C 401000 Fournisseurs
+- Vente: D 411000 Clients / C 701000 Ventes
+- Transport: D 624000 / C 521000 Banque
+- Loyer: D 622000 / C 521000
+- Communication: D 626000 / C 521000
+- Salaire: D 661000 / C 422000 Personnel
+- TVA déductible: D 445660 / C 521000
+- Frais généraux: D 628000 / C 521000
+Si type=credit (vente/encaissement), inverse débit/crédit.
+
+DATE: extrais la date dictée si présente (formats jj/mm/aaaa, "le 5 mars", etc.) au format ISO YYYY-MM-DD. Sinon utilise la date du jour.
+
+LIBELLE: court (≤120 car.) résumé clair de l'opération en français.
+
 Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
-{"entry":{"montant":<number|null>,"devise":"XOF","description":"<texte exact>","type":"debit","categorie":"<catégorie>","tiers":<"nom"|null>,"tvaRate":<number|null>,"montantHT":<number|null>,"montantTVA":<number|null>}}`
+{"entry":{"montant":<number|null>,"devise":"XOF","description":"<texte exact>","libelle":"<libellé court>","date":"YYYY-MM-DD","type":"debit","categorie":"<catégorie>","tiers":<"nom"|null>,"tvaRate":<number|null>,"montantHT":<number|null>,"montantTVA":<number|null>,"compteDebit":"<n° - libellé>","compteCredit":"<n° - libellé>"}}`
           },
           {
             role: "user",
@@ -245,6 +284,10 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas de texte autour):
             tvaRate: typeof raw.tvaRate === 'number' ? raw.tvaRate : null,
             montantHT: typeof raw.montantHT === 'number' ? Math.abs(raw.montantHT) : null,
             montantTVA: typeof raw.montantTVA === 'number' ? Math.abs(raw.montantTVA) : null,
+            date: typeof raw.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.date) ? raw.date : new Date().toISOString().split('T')[0],
+            libelle: typeof raw.libelle === 'string' ? sanitizeInput(raw.libelle).slice(0, 200) : (typeof raw.description === 'string' ? sanitizeInput(raw.description).slice(0, 120) : finalTranscript.slice(0, 120)),
+            compteDebit: typeof raw.compteDebit === 'string' ? sanitizeInput(raw.compteDebit).slice(0, 80) : null,
+            compteCredit: typeof raw.compteCredit === 'string' ? sanitizeInput(raw.compteCredit).slice(0, 80) : null,
           };
 
           // Auto-calculate TVA if rate and amount present but HT missing
