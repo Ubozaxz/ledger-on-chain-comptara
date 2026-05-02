@@ -364,6 +364,47 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
+  const processAudioRecording = async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    cleanupAudio();
+
+    const browserText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
+    const audioBlob = new Blob(audioChunksRef.current, { type: recordingMimeTypeRef.current });
+    audioChunksRef.current = [];
+
+    if (!browserText && audioBlob.size < 1500) {
+      toast({
+        title: audioPeakRef.current > 0.015 ? "Audio trop court" : "Aucune parole détectée",
+        description: "Maintenez le bouton actif et dictez clairement votre opération comptable.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const audioBase64 = audioBlob.size > 0 ? await blobToBase64(audioBlob) : "";
+      const headers = await buildJsonHeaders();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-transcribe`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ transcript: browserText, audioBase64, mimeType: recordingMimeTypeRef.current }),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Erreur ${response.status}`);
+      }
+      const data = await response.json();
+      await handleTranscriptionResult(data, browserText);
+    } catch (error: any) {
+      console.error("Voice audio processing error:", error);
+      toast({ title: "Transcription impossible", description: error.message || "L'IA n'a pas pu lire l'audio réel.", variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const stopRecording = useCallback(() => {
     isListeningRef.current = false;
     if (restartTimeoutRef.current) {
