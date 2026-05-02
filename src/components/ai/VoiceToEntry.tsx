@@ -293,6 +293,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     recorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
     };
+    recorder.onstop = () => {
+      processAudioRecording();
+    };
     recorder.start(1000);
     mediaRecorderRef.current = recorder;
     return true;
@@ -362,46 +365,20 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   };
 
   const stopRecording = useCallback(() => {
-    console.log("stopRecording called");
     isListeningRef.current = false;
     if (restartTimeoutRef.current) {
       clearTimeout(restartTimeoutRef.current);
       restartTimeoutRef.current = null;
     }
     stopTimer();
-    window.setTimeout(() => {
-      if (finishingRef.current) return;
-      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
-      if (!finalText) return;
-      finishingRef.current = true;
-      setIsRecording(false);
-      cleanupAudio();
-      setTranscript(finalText);
-      setLiveTranscript("");
-      extractFromTranscript(finalText);
-    }, 900);
-    
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
-      // onend handler will process the transcript
-    } else {
-      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
-      setIsRecording(false);
-      cleanupAudio();
-      if (finalText) {
-        setTranscript(finalText);
-        setLiveTranscript("");
-        extractFromTranscript(finalText);
-      } else {
-        toast({
-          title: audioPeakRef.current > 0.015 ? "Audio détecté, transcription absente" : "Aucune parole détectée",
-          description: "Aucune donnée fictive n'a été créée. Utilisez un navigateur compatible transcription vocale française.",
-          variant: "destructive",
-        });
-      }
-    }
-    
+    setIsRecording(false);
     setAudioLevel(0);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try { mediaRecorderRef.current.requestData(); } catch {}
+      try { mediaRecorderRef.current.stop(); } catch { processAudioRecording(); }
+    } else {
+      processAudioRecording();
+    }
   }, [toast]);
 
   const extractFromTranscript = async (text: string) => {
