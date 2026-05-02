@@ -364,6 +364,37 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
+  const handleTranscriptionResult = async (data: any, fallbackText: string) => {
+    const finalText = data.transcription || fallbackText;
+    setTranscript(finalText);
+    setLiveTranscript("");
+
+    if (data.entry && data.entry.montant) {
+      const entry: ExtractedEntry = {
+        montant: data.entry.montant,
+        devise: data.entry.devise || "XOF",
+        categorie: data.entry.categorie,
+        tiers: data.entry.tiers,
+        description: data.entry.description,
+        type: data.entry.type,
+        tvaRate: data.entry.tvaRate,
+        montantHT: data.entry.montantHT,
+        montantTVA: data.entry.montantTVA,
+        date: data.entry.date,
+        libelle: data.entry.libelle || data.entry.description,
+        compteDebit: data.entry.compteDebit,
+        compteCredit: data.entry.compteCredit,
+      };
+      setLastResult(entry);
+      onEntryExtracted(entry);
+      toast({ title: "✅ Données extraites", description: `${entry.description || "Écriture"} — ${entry.montant?.toLocaleString('fr-FR')} ${entry.devise}` });
+      if (autoSaveCloud || autoSaveBlockchain) await autoSaveEntry(entry);
+    } else {
+      setLastResult({ raw: finalText });
+      toast({ title: finalText ? "Transcription enregistrée" : "Aucune parole détectée", description: finalText ? "Montant non détecté. Précisez le montant et la devise." : "Aucune donnée fictive n'a été créée.", variant: finalText ? undefined : "destructive" });
+    }
+  };
+
   const processAudioRecording = async () => {
     if (finishingRef.current) return;
     finishingRef.current = true;
