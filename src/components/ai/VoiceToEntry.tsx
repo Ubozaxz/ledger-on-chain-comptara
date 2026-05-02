@@ -283,6 +283,21 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   }, [toast]);
 
+  const startMediaRecorder = (stream: MediaStream) => {
+    if (typeof MediaRecorder === "undefined") return false;
+    const mimeType = getSupportedAudioMimeType();
+    if (!mimeType) return false;
+    audioChunksRef.current = [];
+    recordingMimeTypeRef.current = mimeType;
+    const recorder = new MediaRecorder(stream, { mimeType });
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
+    };
+    recorder.start(1000);
+    mediaRecorderRef.current = recorder;
+    return true;
+  };
+
   // Core: start from a real user gesture, keep microphone alive, and never fabricate speech.
   const startRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -304,24 +319,32 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     setLiveTranscript("");
     setLastResult(null);
 
-    await startAudioVisualizer();
-
-    const browserStarted = await captureBrowserSpeech();
-    if (!browserStarted) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      audioStreamRef.current = stream;
+      await startAudioVisualizer(stream);
+      const recorderStarted = startMediaRecorder(stream);
+      if (!recorderStarted) throw new Error("Enregistrement audio non supporté par ce navigateur");
+    } catch (error: any) {
+      isListeningRef.current = false;
+      cleanupAudio();
       toast({
-        title: "Reconnaissance vocale indisponible",
-        description: "Le micro reste ouvert, mais ce navigateur ne fournit pas de transcription directe. Essayez Chrome Android, Edge ou Safari iOS.",
+        title: "Microphone bloqué",
+        description: error?.name === "NotAllowedError" ? "Autorisez le micro une seule fois dans le navigateur puis réessayez." : (error?.message || "Impossible de démarrer l'enregistrement audio réel."),
         variant: "destructive",
       });
+      return;
     }
 
     setIsRecording(true);
     startTimer();
     toast({
       title: "🎙️ Enregistrement démarré",
-      description: browserStarted ? "Parlez maintenant — transcription réelle en continu" : "Micro actif — aucune donnée fictive ne sera créée",
+      description: "Parlez maintenant — l'audio réel sera transcrit par l'IA",
     });
-  }, [captureBrowserSpeech, toast]);
+  }, [toast]);
 
   const cleanupAudio = () => {
     if (animationRef.current) {
