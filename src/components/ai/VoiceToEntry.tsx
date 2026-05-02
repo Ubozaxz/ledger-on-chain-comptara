@@ -38,6 +38,19 @@ const hasAudioCapture = typeof navigator !== "undefined" && !!navigator.mediaDev
 
 const MAX_RECORDING_SECONDS = 300;
 
+const getSupportedAudioMimeType = () => {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+};
+
+const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onloadend = () => resolve(String(reader.result).split(",")[1] || "");
+  reader.onerror = reject;
+  reader.readAsDataURL(blob);
+});
+
 export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPayment }: VoiceToEntryProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
