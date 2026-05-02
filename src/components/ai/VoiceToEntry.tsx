@@ -38,6 +38,19 @@ const hasAudioCapture = typeof navigator !== "undefined" && !!navigator.mediaDev
 
 const MAX_RECORDING_SECONDS = 300;
 
+const getSupportedAudioMimeType = () => {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+};
+
+const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onloadend = () => resolve(String(reader.result).split(",")[1] || "");
+  reader.onerror = reject;
+  reader.readAsDataURL(blob);
+});
+
 export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPayment }: VoiceToEntryProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -56,6 +69,9 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingMimeTypeRef = useRef("audio/webm");
   const isListeningRef = useRef(false);
   const finalPartsRef = useRef<string[]>([]);
   const liveTranscriptRef = useRef("");
@@ -78,6 +94,10 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
       try { recognitionRef.current.abort(); } catch {}
       recognitionRef.current = null;
     }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try { mediaRecorderRef.current.stop(); } catch {}
+    }
+    mediaRecorderRef.current = null;
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach(t => t.stop());
       audioStreamRef.current = null;
@@ -132,13 +152,8 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
-  const startAudioVisualizer = async () => {
+  const startAudioVisualizer = async (stream: MediaStream) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-      });
-      audioStreamRef.current = stream;
-      
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
       const source = audioContext.createMediaStreamSource(stream);
@@ -268,6 +283,24 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   }, [toast]);
 
+  const startMediaRecorder = (stream: MediaStream) => {
+    if (typeof MediaRecorder === "undefined") return false;
+    const mimeType = getSupportedAudioMimeType();
+    if (!mimeType) return false;
+    audioChunksRef.current = [];
+    recordingMimeTypeRef.current = mimeType;
+    const recorder = new MediaRecorder(stream, { mimeType });
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      processAudioRecording();
+    };
+    recorder.start(1000);
+    mediaRecorderRef.current = recorder;
+    return true;
+  };
+
   // Core: start from a real user gesture, keep microphone alive, and never fabricate speech.
   const startRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -289,24 +322,32 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     setLiveTranscript("");
     setLastResult(null);
 
-    await startAudioVisualizer();
-
-    const browserStarted = await captureBrowserSpeech();
-    if (!browserStarted) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      audioStreamRef.current = stream;
+      await startAudioVisualizer(stream);
+      const recorderStarted = startMediaRecorder(stream);
+      if (!recorderStarted) throw new Error("Enregistrement audio non supporté par ce navigateur");
+    } catch (error: any) {
+      isListeningRef.current = false;
+      cleanupAudio();
       toast({
-        title: "Reconnaissance vocale indisponible",
-        description: "Le micro reste ouvert, mais ce navigateur ne fournit pas de transcription directe. Essayez Chrome Android, Edge ou Safari iOS.",
+        title: "Microphone bloqué",
+        description: error?.name === "NotAllowedError" ? "Autorisez le micro une seule fois dans le navigateur puis réessayez." : (error?.message || "Impossible de démarrer l'enregistrement audio réel."),
         variant: "destructive",
       });
+      return;
     }
 
     setIsRecording(true);
     startTimer();
     toast({
       title: "🎙️ Enregistrement démarré",
-      description: browserStarted ? "Parlez maintenant — transcription réelle en continu" : "Micro actif — aucune donnée fictive ne sera créée",
+      description: "Parlez maintenant — l'audio réel sera transcrit par l'IA",
     });
-  }, [captureBrowserSpeech, toast]);
+  }, [toast]);
 
   const cleanupAudio = () => {
     if (animationRef.current) {
@@ -323,47 +364,93 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
     }
   };
 
+  const handleTranscriptionResult = async (data: any, fallbackText: string) => {
+    const finalText = data.transcription || fallbackText;
+    setTranscript(finalText);
+    setLiveTranscript("");
+
+    if (data.entry && data.entry.montant) {
+      const entry: ExtractedEntry = {
+        montant: data.entry.montant,
+        devise: data.entry.devise || "XOF",
+        categorie: data.entry.categorie,
+        tiers: data.entry.tiers,
+        description: data.entry.description,
+        type: data.entry.type,
+        tvaRate: data.entry.tvaRate,
+        montantHT: data.entry.montantHT,
+        montantTVA: data.entry.montantTVA,
+        date: data.entry.date,
+        libelle: data.entry.libelle || data.entry.description,
+        compteDebit: data.entry.compteDebit,
+        compteCredit: data.entry.compteCredit,
+      };
+      setLastResult(entry);
+      onEntryExtracted(entry);
+      toast({ title: "✅ Données extraites", description: `${entry.description || "Écriture"} — ${entry.montant?.toLocaleString('fr-FR')} ${entry.devise}` });
+      if (autoSaveCloud || autoSaveBlockchain) await autoSaveEntry(entry);
+    } else {
+      setLastResult({ raw: finalText });
+      toast({ title: finalText ? "Transcription enregistrée" : "Aucune parole détectée", description: finalText ? "Montant non détecté. Précisez le montant et la devise." : "Aucune donnée fictive n'a été créée.", variant: finalText ? undefined : "destructive" });
+    }
+  };
+
+  const processAudioRecording = async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    cleanupAudio();
+
+    const browserText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
+    const audioBlob = new Blob(audioChunksRef.current, { type: recordingMimeTypeRef.current });
+    audioChunksRef.current = [];
+
+    if (!browserText && audioBlob.size < 1500) {
+      toast({
+        title: audioPeakRef.current > 0.015 ? "Audio trop court" : "Aucune parole détectée",
+        description: "Maintenez le bouton actif et dictez clairement votre opération comptable.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const audioBase64 = audioBlob.size > 0 ? await blobToBase64(audioBlob) : "";
+      const headers = await buildJsonHeaders();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-transcribe`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ transcript: browserText, audioBase64, mimeType: recordingMimeTypeRef.current }),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Erreur ${response.status}`);
+      }
+      const data = await response.json();
+      await handleTranscriptionResult(data, browserText);
+    } catch (error: any) {
+      console.error("Voice audio processing error:", error);
+      toast({ title: "Transcription impossible", description: error.message || "L'IA n'a pas pu lire l'audio réel.", variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const stopRecording = useCallback(() => {
-    console.log("stopRecording called");
     isListeningRef.current = false;
     if (restartTimeoutRef.current) {
       clearTimeout(restartTimeoutRef.current);
       restartTimeoutRef.current = null;
     }
     stopTimer();
-    window.setTimeout(() => {
-      if (finishingRef.current) return;
-      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
-      if (!finalText) return;
-      finishingRef.current = true;
-      setIsRecording(false);
-      cleanupAudio();
-      setTranscript(finalText);
-      setLiveTranscript("");
-      extractFromTranscript(finalText);
-    }, 900);
-    
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
-      // onend handler will process the transcript
-    } else {
-      const finalText = (liveTranscriptRef.current || finalPartsRef.current.join(" ")).trim();
-      setIsRecording(false);
-      cleanupAudio();
-      if (finalText) {
-        setTranscript(finalText);
-        setLiveTranscript("");
-        extractFromTranscript(finalText);
-      } else {
-        toast({
-          title: audioPeakRef.current > 0.015 ? "Audio détecté, transcription absente" : "Aucune parole détectée",
-          description: "Aucune donnée fictive n'a été créée. Utilisez un navigateur compatible transcription vocale française.",
-          variant: "destructive",
-        });
-      }
-    }
-    
+    setIsRecording(false);
     setAudioLevel(0);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try { mediaRecorderRef.current.requestData(); } catch {}
+      try { mediaRecorderRef.current.stop(); } catch { processAudioRecording(); }
+    } else {
+      processAudioRecording();
+    }
   }, [toast]);
 
   const extractFromTranscript = async (text: string) => {

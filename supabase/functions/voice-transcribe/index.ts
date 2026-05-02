@@ -138,24 +138,51 @@ serve(async (req) => {
       });
     }
 
-    const body = await req.json();
-    const { transcript } = body;
-
-    if (!transcript || typeof transcript !== 'string' || transcript.trim().length < 2) {
-      return new Response(JSON.stringify({ 
-        error: "Aucune transcription reçue. Parlez clairement dans le microphone." 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Allow longer transcripts for extended recordings (up to 5 min)
-    const finalTranscript = sanitizeInput(transcript).slice(0, 5000);
-
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY not configured");
+    }
+
+    const body = await req.json();
+    const { transcript, audioBase64, mimeType } = body;
+    let finalTranscript = typeof transcript === 'string' ? sanitizeInput(transcript).slice(0, 5000) : '';
+
+    if ((!finalTranscript || finalTranscript.length < 2) && typeof audioBase64 === 'string' && audioBase64.length > 1000) {
+      const audioFormat = String(mimeType || '').includes('mp4') ? 'mp4'
+        : String(mimeType || '').includes('ogg') ? 'ogg'
+        : String(mimeType || '').includes('wav') ? 'wav'
+        : 'webm';
+
+      const transcriptionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: "Transcris exactement cette note vocale comptable en français. Retourne uniquement le texte dicté, sans commentaire. Si aucune voix humaine n'est audible, retourne une chaîne vide." },
+              { type: "input_audio", input_audio: { data: audioBase64, format: audioFormat } }
+            ]
+          }],
+          temperature: 0,
+          max_tokens: 1000,
+        }),
+      });
+
+      if (!transcriptionResponse.ok) {
+        console.error("Audio transcription error:", transcriptionResponse.status, await transcriptionResponse.text());
+      } else {
+        const transcriptionJson = await transcriptionResponse.json();
+        finalTranscript = sanitizeInput(transcriptionJson.choices?.[0]?.message?.content || '').replace(/^"|"$/g, '').slice(0, 5000);
+      }
+    }
+
+    if (!finalTranscript || finalTranscript.length < 2) {
+      return new Response(JSON.stringify({ transcription: '', entry: null, error: "Aucune voix humaine exploitable détectée." }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log(`Voice extraction for user ${user.id}: "${finalTranscript.slice(0, 100)}..."`);
