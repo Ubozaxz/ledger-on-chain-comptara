@@ -8,7 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Mail, Lock, UserPlus, LogIn, Shield } from 'lucide-react';
+import { Loader2, Mail, Lock, UserPlus, LogIn, Eye, EyeOff } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import comptaraLogo from '@/assets/comptara-logo.jpg';
 import { z } from 'zod';
 import { lovable } from '@/integrations/lovable/index';
 
@@ -19,6 +21,8 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
+  const [needsConfirm, setNeedsConfirm] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   
   const { signIn, signUp, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -35,7 +39,7 @@ export default function Auth() {
     const newErrors: { email?: string; password?: string } = {};
     
     try {
-      emailSchema.parse(email);
+      emailSchema.parse(email.trim());
     } catch (e) {
       if (e instanceof z.ZodError) {
         newErrors.email = e.errors[0].message;
@@ -59,7 +63,7 @@ export default function Auth() {
     if (!validateForm()) return;
     
     setIsLoading(true);
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(email.trim().toLowerCase(), password);
     setIsLoading(false);
 
     if (error) {
@@ -67,7 +71,12 @@ export default function Auth() {
       if (error.message.includes('Invalid login credentials')) {
         message = 'Email ou mot de passe incorrect';
       } else if (error.message.includes('Email not confirmed')) {
-        message = 'Veuillez confirmer votre email avant de vous connecter';
+        message = 'Veuillez confirmer votre email (vérifiez vos spams), ou renvoyez le lien.';
+        setNeedsConfirm(true);
+      } else if (/rate limit|too many/i.test(error.message)) {
+        message = 'Trop de tentatives, réessayez dans quelques minutes';
+      } else if (/fetch|network/i.test(error.message)) {
+        message = 'Pas de connexion internet';
       }
       toast({
         title: 'Échec de la connexion',
@@ -88,15 +97,19 @@ export default function Auth() {
     if (!validateForm()) return;
     
     setIsLoading(true);
-    const { error } = await signUp(email, password);
+    const { error } = await signUp(email.trim().toLowerCase(), password);
     setIsLoading(false);
 
     if (error) {
       let message = 'Erreur lors de l\'inscription';
-      if (error.message.includes('User already registered')) {
-        message = 'Cet email est déjà utilisé';
-      } else if (error.message.includes('Password should be')) {
-        message = 'Le mot de passe est trop faible';
+      if (/already registered|already been registered/i.test(error.message)) {
+        message = 'Cet email est déjà utilisé : connectez-vous ou utilisez Google';
+      } else if (/password/i.test(error.message) && /(weak|pwned|leaked|should be|known)/i.test(error.message)) {
+        message = 'Mot de passe trop faible ou trop courant, choisissez-en un autre';
+      } else if (/rate limit/i.test(error.message)) {
+        message = 'Trop de tentatives, réessayez dans quelques minutes';
+      } else {
+        message = error.message;
       }
       toast({
         title: 'Échec de l\'inscription',
@@ -106,17 +119,40 @@ export default function Auth() {
     } else {
       toast({
         title: 'Inscription réussie',
-        description: 'Vérifiez votre email pour confirmer votre compte'
+        description: 'Un lien de confirmation a été envoyé. Vérifiez votre boîte mail (et les spams).'
       });
+      setNeedsConfirm(true);
     }
+  };
+
+  const handleResend = async () => {
+    if (!email) return;
+    const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase(), options: { emailRedirectTo: window.location.origin } });
+    toast(error ? { title: 'Erreur', description: error.message, variant: 'destructive' } : { title: 'Lien renvoyé', description: 'Vérifiez votre boîte mail' });
+  };
+
+  const handleForgot = async () => {
+    try { emailSchema.parse(email.trim()); } catch { setErrors({ email: 'Saisissez votre email ci-dessus' }); return; }
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: `${window.location.origin}/reset-password` });
+    toast(error ? { title: 'Erreur', description: error.message, variant: 'destructive' } : { title: 'Email envoyé', description: 'Suivez le lien reçu pour choisir un nouveau mot de passe' });
   };
 
   const handleGoogle = async () => {
     setIsLoading(true);
-    const result = await lovable.auth.signInWithOAuth('google', { redirect_uri: window.location.origin });
-    if (result.error) {
+    let result: any;
+    try {
+      result = await lovable.auth.signInWithOAuth('google', { redirect_uri: window.location.origin, extraParams: { prompt: 'select_account' } });
+    } catch (e: any) {
+      result = { error: e };
+    }
+    if (result?.error) {
       setIsLoading(false);
-      toast({ title: 'Échec Google', description: result.error.message, variant: 'destructive' });
+      const msg = String(result.error?.message || '');
+      toast({
+        title: 'Connexion Google interrompue',
+        description: /popup|closed|cancel/i.test(msg) ? 'Fenêtre fermée. Autorisez les pop-ups et réessayez.' : (msg || 'Réessayez dans un instant'),
+        variant: 'destructive',
+      });
       return;
     }
     if (result.redirected) return;
@@ -141,9 +177,7 @@ export default function Auth() {
         
         <CardHeader className="text-center space-y-4 pt-8">
           <div className="flex justify-center">
-            <div className="h-16 w-16 bg-gradient-primary rounded-full flex items-center justify-center shadow-lg">
-              <Shield className="h-8 w-8 text-white" />
-            </div>
+            <img src={comptaraLogo} alt="Comptara" className="h-16 w-16 rounded-2xl object-cover shadow-lg ring-1 ring-primary/30" />
           </div>
           <div>
             <CardTitle className="text-2xl text-gradient">Comptara</CardTitle>
@@ -182,6 +216,8 @@ export default function Auth() {
                     <Input
                       id="signin-email"
                       type="email"
+                      autoComplete="email"
+                      inputMode="email"
                       placeholder="votre@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -200,13 +236,17 @@ export default function Auth() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signin-password"
-                      type="password"
+                      type={showPwd ? 'text' : 'password'}
+                      autoComplete="current-password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 h-11"
+                      className="pl-10 pr-11 h-11"
                       required
                     />
+                    <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center text-muted-foreground" aria-label={showPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>
+                      {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                   {errors.password && (
                     <p className="text-xs text-destructive">{errors.password}</p>
@@ -227,6 +267,9 @@ export default function Auth() {
                     </>
                   )}
                 </Button>
+                <button type="button" onClick={handleForgot} className="w-full text-center text-sm text-primary hover:underline">
+                  Mot de passe oublié ?
+                </button>
               </form>
             </TabsContent>
             
@@ -239,6 +282,8 @@ export default function Auth() {
                     <Input
                       id="signup-email"
                       type="email"
+                      autoComplete="email"
+                      inputMode="email"
                       placeholder="votre@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -257,13 +302,17 @@ export default function Auth() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signup-password"
-                      type="password"
+                      type={showPwd ? 'text' : 'password'}
+                      autoComplete="new-password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 h-11"
+                      className="pl-10 pr-11 h-11"
                       required
                     />
+                    <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center text-muted-foreground" aria-label={showPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>
+                      {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                   {errors.password && (
                     <p className="text-xs text-destructive">{errors.password}</p>
@@ -290,6 +339,11 @@ export default function Auth() {
               </form>
             </TabsContent>
           </Tabs>
+          {needsConfirm && (
+            <Button type="button" variant="ghost" className="w-full text-sm" onClick={handleResend}>
+              Renvoyer l'email de confirmation
+            </Button>
+          )}
           
           <p className="text-center text-xs text-muted-foreground pt-4">
             designed by <span className="font-medium text-primary">promé</span>
