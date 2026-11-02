@@ -14,6 +14,8 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: null,
+      devOptions: { enabled: false },
       includeAssets: ["favicon.ico", "placeholder.svg"],
       workbox: {
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
