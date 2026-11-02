@@ -178,64 +178,6 @@ const Index = () => {
     );
   }
 
-  if (!isConnected) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 pb-16">
-        <WalletConnector 
-          isConnected={isConnected}
-          walletAddress={walletAddress}
-          walletType={walletType}
-          onConnect={onWalletConnected}
-          onDisconnect={handleDisconnect}
-        />
-        
-        <div className="flex items-center justify-center min-h-[calc(100vh-120px)] px-4">
-          <Card className="w-full max-w-md card-modern">
-            <CardHeader className="text-center p-4 md:p-6">
-              <div className="flex justify-center mb-4">
-                <div className="h-14 w-14 md:h-16 md:w-16 bg-gradient-primary rounded-full flex items-center justify-center">
-                  <Wallet className="h-7 w-7 md:h-8 md:w-8 text-white" />
-                </div>
-              </div>
-              <CardTitle className="text-xl md:text-2xl text-gradient">Connexion requise</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center space-y-4 md:space-y-6 p-4 md:p-6">
-              <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
-                Connectez votre portefeuille pour accéder à <strong>Comptara</strong> et commencer à enregistrer vos écritures comptables sur Hedera Testnet.
-              </p>
-              
-              <div className="bg-muted/50 rounded-lg p-3 md:p-4 space-y-2">
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="h-2 w-2 bg-success rounded-full"></div>
-                  <span className="text-xs md:text-sm text-muted-foreground">Hedera Testnet</span>
-                </div>
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="h-2 w-2 bg-primary rounded-full"></div>
-                  <span className="text-xs md:text-sm text-muted-foreground">Transactions sécurisées</span>
-                </div>
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="h-2 w-2 bg-warning rounded-full"></div>
-                  <span className="text-xs md:text-sm text-muted-foreground">Persistance Cloud</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between gap-2">
-                <Button 
-                  onClick={handleConnect} 
-                  className="flex-1 bg-gradient-primary hover:opacity-90 transition-all duration-300 glow touch-manipulation h-11 md:h-12 text-sm md:text-base"
-                >
-                  <Wallet className="h-4 w-4 md:h-5 md:w-5 mr-2" />
-                  Connecter Wallet
-                </Button>
-                <ThemeToggle />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pb-20">
       {/* Full-screen offline overlay (always reachable, mobile-first) */}
