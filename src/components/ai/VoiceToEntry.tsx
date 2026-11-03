@@ -27,6 +27,8 @@ interface ExtractedEntry {
 }
 
 interface VoiceToEntryProps {
+  isPro?: boolean;
+  onRequirePro?: () => void;
   onEntryExtracted: (entry: ExtractedEntry) => void;
   onInsertToJournal?: (entry: ExtractedEntry) => void;
   onInsertToPayment?: (entry: ExtractedEntry) => void;
@@ -51,7 +53,7 @@ const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
   reader.readAsDataURL(blob);
 });
 
-export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPayment }: VoiceToEntryProps) => {
+export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPayment, isPro = false, onRequirePro }: VoiceToEntryProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -595,7 +597,7 @@ export const VoiceToEntry = ({ onEntryExtracted, onInsertToJournal, onInsertToPa
               <Link2 className="h-3.5 w-3.5 text-primary" />
               <Label className="text-[10px] sm:text-xs font-medium">Chain</Label>
             </div>
-            <Switch checked={autoSaveBlockchain} onCheckedChange={setAutoSaveBlockchain} />
+            <Switch checked={autoSaveBlockchain && isPro} onCheckedChange={(v) => { if (v && !isPro) { onRequirePro?.(); return; } setAutoSaveBlockchain(v); }} />
           </div>
         </div>
 
