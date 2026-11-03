@@ -13,6 +13,8 @@ import { getEthereum } from "@/lib/hedera";
 import { supabase } from "@/integrations/supabase/client";
 
 interface JournalEntryProps {
+  isPro?: boolean;
+  onRequirePro?: () => void;
   onEntryAdded: (entry: any) => void;
 }
 
@@ -24,7 +26,7 @@ interface TvaRate {
   is_default: boolean;
 }
 
-export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
+export const JournalEntry = ({ onEntryAdded, isPro = false, onRequirePro }: JournalEntryProps) => {
   const { t } = useTranslation();
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -98,7 +100,7 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
       let txHash = "";
 
       // Only anchor on-chain if user opted in AND wallet is available
-      if (anchorOnChain && hasWallet) {
+      if (anchorOnChain && isPro && hasWallet) {
         const { anchorEntryData, getExplorerTxUrl } = await import("@/lib/hedera");
         const payload = {
           type: "journal_entry",
@@ -337,8 +339,8 @@ export const JournalEntry = ({ onEntryAdded }: JournalEntryProps) => {
               </div>
             </div>
             <Switch
-              checked={anchorOnChain}
-              onCheckedChange={setAnchorOnChain}
+              checked={anchorOnChain && isPro}
+              onCheckedChange={(v) => { if (v && !isPro) { onRequirePro?.(); return; } setAnchorOnChain(v); }}
               disabled={!hasWallet}
             />
           </div>
