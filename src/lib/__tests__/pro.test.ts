@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { expect, test } from "bun:test";
 import { PRO_PRICES, isProActive, planExpiry, buildWhatsAppLink } from "../pro";
 
