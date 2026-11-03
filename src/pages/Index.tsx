@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { BookOpen, CreditCard, FileBarChart, Download, BarChart3, Wallet, Hash, Bot, RefreshCw, Cloud, Loader2, LogIn, Shield } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
+import { usePro } from "@/hooks/usePro";
+import { ProDialog } from "@/components/pro/ProDialog";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -33,6 +35,9 @@ const Index = () => {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletType, setWalletType] = useState<WalletType | null>(null);
   const { toast } = useToast();
+  const { isPro } = usePro();
+  const [proOpen, setProOpen] = useState(false);
+  const requirePro = () => setProOpen(true);
   
   // Use cloud data hook for persistence (requires auth)
   const { entries, payments, isLoading, isOnline, pendingSync, addEntry, addPayment, refreshData, syncOfflineQueue } = useCloudData(walletAddress, user?.id ?? null);
@@ -107,6 +112,7 @@ const Index = () => {
   };
 
   const handleExportData = async () => {
+    if (!isPro) { requirePro(); return; }
     try {
       const { generateFullExportPDF } = await import("@/lib/pdf-generator");
       
@@ -341,7 +347,7 @@ const Index = () => {
           
           <TabsContent value="ai" className="space-y-4 md:space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              <VoiceToEntry 
+              <VoiceToEntry isPro={isPro} onRequirePro={requirePro} 
                 onEntryExtracted={(entry) => {
                   toast({
                     title: "Dictée analysée",
@@ -387,7 +393,7 @@ const Index = () => {
           </TabsContent>
           
           <TabsContent value="journal" className="space-y-4 md:space-y-6">
-            <JournalEntry onEntryAdded={handleEntryAdded} />
+            <JournalEntry onEntryAdded={handleEntryAdded} isPro={isPro} onRequirePro={requirePro} />
             <EntriesHistory entries={entries} />
           </TabsContent>
           
@@ -497,6 +503,7 @@ const Index = () => {
                 <CardTitle className="flex items-center space-x-2 text-base md:text-lg">
                   <FileBarChart className="h-4 w-4 md:h-5 md:w-5 text-primary" />
                   <span>Rapports et exports</span>
+                  {isPro ? <Badge>Pro</Badge> : <Badge variant="outline" className="cursor-pointer" onClick={requirePro}>Pro requis</Badge>}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 md:space-y-6 p-4 md:p-6">
@@ -512,6 +519,7 @@ const Index = () => {
                   <Button
                     variant="outline"
                     onClick={async () => {
+                      if (!isPro) { requirePro(); return; }
                       try {
                         const allData = [...entries, ...payments];
                         if (allData.length === 0) {
@@ -570,6 +578,7 @@ const Index = () => {
           </TabsContent>
         </Tabs>
       </div>
+      <ProDialog open={proOpen} onOpenChange={setProOpen} email={user?.email} />
     </div>
   );
 };
