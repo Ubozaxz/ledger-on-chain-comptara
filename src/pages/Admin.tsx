@@ -17,6 +17,7 @@ import {
   Download, Settings, Eye
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { isProActive, planExpiry, type ProPlan } from '@/lib/pro';
 
 interface AdminStats {
   totalUsers: number;
@@ -214,6 +215,20 @@ export default function Admin() {
   const getUserRole = (userId: string): string => {
     const role = userRoles.find(r => r.user_id === userId);
     return role?.role || 'user';
+  };
+
+  const [subs, setSubs] = useState<Record<string, string>>({});
+  const loadSubs = async () => {
+    const { data } = await supabase.from('pro_subscriptions').select('user_id, expires_at');
+    setSubs(Object.fromEntries((data || []).map(d => [d.user_id, d.expires_at])));
+  };
+  useEffect(() => { loadSubs(); }, []);
+  const setPro = async (userId: string, plan: ProPlan | null) => {
+    const { error } = plan
+      ? await supabase.from('pro_subscriptions').upsert({ user_id: userId, plan, expires_at: planExpiry(plan).toISOString(), updated_at: new Date().toISOString() })
+      : await supabase.from('pro_subscriptions').delete().eq('user_id', userId);
+    toast(error ? { title: 'Erreur', description: error.message, variant: 'destructive' } : { title: plan ? 'Compte Pro activé' : 'Pro retiré' });
+    loadSubs();
   };
 
   const exportData = () => {
@@ -457,12 +472,25 @@ export default function Admin() {
                               </p>
                             </div>
                           </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {isProActive(subs[userData.user_id]) ? (
+                            <div className="flex items-center gap-1">
+                              <Badge className="text-[10px]">Pro → {new Date(subs[userData.user_id]).toLocaleDateString('fr-FR')}</Badge>
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setPro(userData.user_id, null)}>Retirer</Button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setPro(userData.user_id, 'monthly')}>Pro 1 mois</Button>
+                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setPro(userData.user_id, 'yearly')}>Pro 1 an</Button>
+                            </div>
+                          )}
                           <Badge 
                             variant={role === 'admin' ? 'default' : 'outline'}
                             className={role === 'admin' ? 'bg-primary/20 text-primary flex-shrink-0' : 'flex-shrink-0'}
                           >
                             {role}
                           </Badge>
+                          </div>
                         </div>
                       );
                     })}
