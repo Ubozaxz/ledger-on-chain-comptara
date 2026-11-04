@@ -28,7 +28,7 @@ import { ProDialog } from "@/components/pro/ProDialog";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, isLoading: authLoading, isAdmin } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, isAdmin, signOut } = useAuth();
   const tabsRef = useRef<HTMLDivElement>(null);
 
   const [isConnected, setIsConnected] = useState(false);
@@ -78,6 +78,12 @@ const Index = () => {
     setWalletAddress(null);
     setWalletType(null);
     toast({ title: "Déconnecté", description: "Portefeuille déconnecté" });
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast({ title: "Déconnecté", description: "À bientôt sur Comptara" });
+    navigate('/auth', { replace: true });
   };
 
   const handleEntryAdded = async (entry: any) => {
@@ -196,6 +202,8 @@ const Index = () => {
         walletType={walletType}
         onConnect={onWalletConnected}
         onDisconnect={handleDisconnect}
+        userEmail={user?.email}
+        onSignOut={handleSignOut}
       />
       
       <div className="container mx-auto px-2 sm:px-4 py-3 md:py-8 space-y-3 md:space-y-8 max-w-7xl">
