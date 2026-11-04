@@ -133,7 +133,7 @@ export const WalletConnector = ({
           </Badge>
         </div>
 
-        <div className="flex items-center space-x-2 justify-end">
+        <div className="flex items-center space-x-1.5 justify-end flex-shrink-0">
           <div className="flex items-center space-x-1">
             <ThemeToggle />
             <Button
@@ -336,7 +336,7 @@ export const WalletConnector = ({
               className="h-8 md:h-10 px-2 md:px-3 border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground touch-manipulation"
             >
               <LogOut className="h-4 w-4" />
-              <span className="ml-1 text-xs">Déconnexion</span>
+              <span className="ml-1 text-xs hidden min-[420px]:inline">Déconnexion</span>
             </Button>
           )}
         </div>
