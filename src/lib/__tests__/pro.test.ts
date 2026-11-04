@@ -2,9 +2,9 @@
 import { expect, test } from "bun:test";
 import { PRO_PRICES, isProActive, planExpiry, buildWhatsAppLink } from "../pro";
 
-test("prix Pro: 9900 FCFA/mois et 99000 FCFA/an", () => {
+test("prix Pro: 9900 FCFA/mois et 99900 FCFA/an", () => {
   expect(PRO_PRICES.monthly).toBe(9900);
-  expect(PRO_PRICES.yearly).toBe(99000);
+  expect(PRO_PRICES.yearly).toBe(99900);
 });
 test("abonnement expiré = non Pro", () => {
   expect(isProActive("2020-01-01T00:00:00Z", new Date("2026-01-01"))).toBe(false);

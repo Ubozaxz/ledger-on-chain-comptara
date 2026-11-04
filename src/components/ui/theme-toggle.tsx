@@ -1,34 +1,24 @@
-import { useState } from 'react';
+import { forwardRef, useEffect, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from 'next-themes';
 
-export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+export const ThemeToggle = forwardRef<HTMLButtonElement>(function ThemeToggle(_props, ref) {
+  const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-
-  // useEffect would be preferred, but for simplicity we'll use this approach
-  if (!mounted) {
-    setTimeout(() => setMounted(true), 0);
-    return (
-      <Button variant="ghost" size="sm">
-        <Sun className="h-4 w-4" />
-      </Button>
-    );
-  }
+  useEffect(() => setMounted(true), []);
+  const isDark = !mounted || resolvedTheme === 'dark';
 
   return (
     <Button
+      ref={ref}
       variant="ghost"
       size="sm"
-      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-      className="touch-manipulation"
+      aria-label={isDark ? 'Mode clair' : 'Mode sombre'}
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      className="touch-manipulation h-8 w-8 p-0"
     >
-      {theme === 'dark' ? (
-        <Sun className="h-4 w-4 text-yellow-500" />
-      ) : (
-        <Moon className="h-4 w-4 text-slate-700" />
-      )}
+      {isDark ? <Sun className="h-4 w-4 text-warning" /> : <Moon className="h-4 w-4" />}
     </Button>
   );
-}
+});

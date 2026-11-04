@@ -15,6 +15,8 @@ interface WalletConnectorProps {
   walletType: WalletType | null;
   onConnect: (address: string, type: WalletType) => void;
   onDisconnect: () => void;
+  userEmail?: string | null;
+  onSignOut?: () => void;
 }
 
 export const WalletConnector = ({ 
@@ -22,7 +24,9 @@ export const WalletConnector = ({
   walletAddress, 
   walletType, 
   onConnect, 
-  onDisconnect 
+  onDisconnect,
+  userEmail,
+  onSignOut,
 }: WalletConnectorProps) => {
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
@@ -113,8 +117,8 @@ export const WalletConnector = ({
   return (
     <Card className="border-0 rounded-none shadow-md bg-gradient-card border-b backdrop-blur-sm sticky top-0 z-50">
       <div className="px-3 md:px-6 py-2 md:py-4 flex items-center justify-between gap-2">
-        <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
-          <div className="flex items-center space-x-2 md:space-x-3">
+        <div className="flex items-center space-x-2 md:space-x-4 min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center space-x-2 md:space-x-3 min-w-0">
             <div className="h-8 w-8 md:h-10 md:w-10 bg-gradient-primary rounded-lg flex items-center justify-center flex-shrink-0">
               <Shield className="h-4 w-4 md:h-6 md:w-6 text-white" />
             </div>
@@ -129,7 +133,7 @@ export const WalletConnector = ({
           </Badge>
         </div>
 
-        <div className="flex items-center space-x-2 justify-end">
+        <div className="flex items-center space-x-1.5 justify-end flex-shrink-0">
           <div className="flex items-center space-x-1">
             <ThemeToggle />
             <Button
@@ -165,10 +169,10 @@ export const WalletConnector = ({
           ) : (
             <Dialog open={showWalletDialog} onOpenChange={setShowWalletDialog}>
               <DialogTrigger asChild>
-                <Button className="bg-gradient-primary hover:opacity-90 glow transition-all duration-300 h-9 md:h-10 px-3 md:px-4 text-sm">
+                <Button variant="outline" className="h-8 md:h-10 px-2 md:px-4 text-xs md:text-sm border-primary/30 touch-manipulation">
                   <Wallet className="h-4 w-4 mr-2" />
                   <span className="hidden sm:inline">{t('connectWallet')}</span>
-                  <span className="sm:hidden">Connexion</span>
+                  <span className="sm:hidden">Wallet</span>
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-[95vw] max-w-md mx-auto">
@@ -320,6 +324,20 @@ export const WalletConnector = ({
                 </div>
               </DialogContent>
             </Dialog>
+          )}
+
+          {onSignOut && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSignOut}
+              title={userEmail ? `Se déconnecter (${userEmail})` : 'Se déconnecter'}
+              aria-label="Se déconnecter"
+              className="h-8 md:h-10 px-2 md:px-3 border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground touch-manipulation"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="ml-1 text-xs hidden min-[420px]:inline">Déconnexion</span>
+            </Button>
           )}
         </div>
       </div>

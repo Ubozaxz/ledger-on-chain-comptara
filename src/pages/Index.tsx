@@ -25,10 +25,11 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { usePro } from "@/hooks/usePro";
 import { ProDialog } from "@/components/pro/ProDialog";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, isLoading: authLoading, isAdmin } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, isAdmin, signOut } = useAuth();
   const tabsRef = useRef<HTMLDivElement>(null);
 
   const [isConnected, setIsConnected] = useState(false);
@@ -78,6 +79,12 @@ const Index = () => {
     setWalletAddress(null);
     setWalletType(null);
     toast({ title: "Déconnecté", description: "Portefeuille déconnecté" });
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast({ title: "Déconnecté", description: "À bientôt sur Comptara" });
+    navigate('/auth', { replace: true });
   };
 
   const handleEntryAdded = async (entry: any) => {
@@ -196,6 +203,8 @@ const Index = () => {
         walletType={walletType}
         onConnect={onWalletConnected}
         onDisconnect={handleDisconnect}
+        userEmail={user?.email}
+        onSignOut={handleSignOut}
       />
       
       <div className="container mx-auto px-2 sm:px-4 py-3 md:py-8 space-y-3 md:space-y-8 max-w-7xl">
@@ -340,12 +349,15 @@ const Index = () => {
           </TabsList>
           
           <TabsContent value="dashboard" className="space-y-4 md:space-y-6">
+            <ErrorBoundary compact label="dashboard">
             <AnalyticsCharts entries={entries} payments={payments} />
             <AuditModule entries={entries} payments={payments} />
             <AIChat ledgerData={{ entries, payments }} />
+            </ErrorBoundary>
           </TabsContent>
           
           <TabsContent value="ai" className="space-y-4 md:space-y-6">
+            <ErrorBoundary compact label="ai">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
               <VoiceToEntry isPro={isPro} onRequirePro={requirePro} 
                 onEntryExtracted={(entry) => {
@@ -390,14 +402,18 @@ const Index = () => {
               <FileAnalyzer />
             </div>
             <AIChat ledgerData={{ entries, payments }} />
+            </ErrorBoundary>
           </TabsContent>
           
           <TabsContent value="journal" className="space-y-4 md:space-y-6">
+            <ErrorBoundary compact label="journal">
             <JournalEntry onEntryAdded={handleEntryAdded} isPro={isPro} onRequirePro={requirePro} />
             <EntriesHistory entries={entries} />
+            </ErrorBoundary>
           </TabsContent>
           
           <TabsContent value="payments" className="space-y-4 md:space-y-6">
+            <ErrorBoundary compact label="payments">
             <PaymentForm onPaymentAdded={handlePaymentAdded} />
             {payments.length > 0 && (
               <Card className="card-modern">
@@ -495,9 +511,11 @@ const Index = () => {
                 </CardContent>
               </Card>
             )}
+            </ErrorBoundary>
           </TabsContent>
           
           <TabsContent value="reports" className="space-y-4 md:space-y-6">
+            <ErrorBoundary compact label="reports">
             <Card className="card-modern">
               <CardHeader className="p-4 md:p-6">
                 <CardTitle className="flex items-center space-x-2 text-base md:text-lg">
@@ -575,6 +593,7 @@ const Index = () => {
                 </div>
               </CardContent>
             </Card>
+            </ErrorBoundary>
           </TabsContent>
         </Tabs>
       </div>
