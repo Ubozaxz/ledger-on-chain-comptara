@@ -117,8 +117,8 @@ export const WalletConnector = ({
   return (
     <Card className="border-0 rounded-none shadow-md bg-gradient-card border-b backdrop-blur-sm sticky top-0 z-50">
       <div className="px-3 md:px-6 py-2 md:py-4 flex items-center justify-between gap-2">
-        <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
-          <div className="flex items-center space-x-2 md:space-x-3">
+        <div className="flex items-center space-x-2 md:space-x-4 min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center space-x-2 md:space-x-3 min-w-0">
             <div className="h-8 w-8 md:h-10 md:w-10 bg-gradient-primary rounded-lg flex items-center justify-center flex-shrink-0">
               <Shield className="h-4 w-4 md:h-6 md:w-6 text-white" />
             </div>
