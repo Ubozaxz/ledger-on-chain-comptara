@@ -352,7 +352,8 @@ const Index = () => {
             <ErrorBoundary compact label="dashboard">
             <AnalyticsCharts entries={entries} payments={payments} />
             <AuditModule entries={entries} payments={payments} />
-            <AIChat ledgerData={{ entries, payments }} />            </ErrorBoundary>
+            <AIChat ledgerData={{ entries, payments }} />
+            </ErrorBoundary>
           </TabsContent>
           
           <TabsContent value="ai" className="space-y-4 md:space-y-6">
@@ -400,13 +401,15 @@ const Index = () => {
               />
               <FileAnalyzer />
             </div>
-            <AIChat ledgerData={{ entries, payments }} />            </ErrorBoundary>
+            <AIChat ledgerData={{ entries, payments }} />
+            </ErrorBoundary>
           </TabsContent>
           
           <TabsContent value="journal" className="space-y-4 md:space-y-6">
             <ErrorBoundary compact label="journal">
             <JournalEntry onEntryAdded={handleEntryAdded} isPro={isPro} onRequirePro={requirePro} />
-            <EntriesHistory entries={entries} />            </ErrorBoundary>
+            <EntriesHistory entries={entries} />
+            </ErrorBoundary>
           </TabsContent>
           
           <TabsContent value="payments" className="space-y-4 md:space-y-6">
@@ -507,7 +510,8 @@ const Index = () => {
                   ))}
                 </CardContent>
               </Card>
-            )}            </ErrorBoundary>
+            )}
+            </ErrorBoundary>
           </TabsContent>
           
           <TabsContent value="reports" className="space-y-4 md:space-y-6">
@@ -588,7 +592,8 @@ const Index = () => {
                   </ul>
                 </div>
               </CardContent>
-            </Card>            </ErrorBoundary>
+            </Card>
+            </ErrorBoundary>
           </TabsContent>
         </Tabs>
       </div>
