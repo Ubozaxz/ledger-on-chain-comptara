@@ -8,6 +8,7 @@ import { Wallet, Shield, LogOut, Globe, Smartphone, Monitor, Loader2, AlertCircl
 import { WalletType, connectMetaMask, connectHashPack, connectTrustWallet, isWalletInstalled, formatAddress, isMobile, isTrustWalletAvailable, isInWalletBrowser } from '@/lib/wallets';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import comptaraLogo from '@/assets/comptara-logo.jpg';
 
 interface WalletConnectorProps {
   isConnected: boolean;
@@ -115,12 +116,12 @@ export const WalletConnector = ({
   };
 
   return (
-    <Card className="border-0 rounded-none shadow-md bg-gradient-card border-b backdrop-blur-sm sticky top-0 z-50">
+    <Card className="border-0 rounded-none shadow-md bg-background/85 border-b backdrop-blur-md sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
       <div className="px-3 md:px-6 py-2 md:py-4 flex items-center justify-between gap-2">
         <div className="flex items-center space-x-2 md:space-x-4 min-w-0 flex-1 overflow-hidden">
           <div className="flex items-center space-x-2 md:space-x-3 min-w-0">
-            <div className="h-8 w-8 md:h-10 md:w-10 bg-gradient-primary rounded-lg flex items-center justify-center flex-shrink-0">
-              <Shield className="h-4 w-4 md:h-6 md:w-6 text-white" />
+            <div className="h-9 w-9 md:h-10 md:w-10 rounded-xl overflow-hidden flex-shrink-0 shadow-elegant">
+              <img src={comptaraLogo} alt="Comptara" className="h-full w-full object-cover" />
             </div>
             <div className="min-w-0">
               <h1 className="text-base md:text-2xl font-bold text-gradient truncate">{t('appTitle')}</h1>

@@ -38,6 +38,8 @@ const Index = () => {
   const { toast } = useToast();
   const { isPro } = usePro();
   const [proOpen, setProOpen] = useState(false);
+  const [tab, setTab] = useState("dashboard");
+  const goTab = (v: string) => { setTab(v); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* ignore */ } };
   const requirePro = () => setProOpen(true);
   
   // Use cloud data hook for persistence (requires auth)
@@ -192,7 +194,7 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pb-4 md:pb-8">
       {/* Full-screen offline overlay (always reachable, mobile-first) */}
       {!isOnline && (
         <OfflineScreen pendingSync={pendingSync} onRetry={() => { refreshData(); syncOfflineQueue(); }} />
@@ -255,18 +257,10 @@ const Index = () => {
           entries={entries} 
           payments={payments}
           onSuggestionClick={(action) => {
-            if (action === "navigate-journal" && tabsRef.current) {
-              const journalTab = tabsRef.current.querySelector('[value="journal"]') as HTMLButtonElement;
-              journalTab?.click();
-            } else if (action === "navigate-ai" && tabsRef.current) {
-              const aiTab = tabsRef.current.querySelector('[value="ai"]') as HTMLButtonElement;
-              aiTab?.click();
-            } else if (action === "export") {
-              handleExportData();
-            } else if (action === "run-audit" && tabsRef.current) {
-              const dashboardTab = tabsRef.current.querySelector('[value="dashboard"]') as HTMLButtonElement;
-              dashboardTab?.click();
-            }
+            if (action === "navigate-journal") goTab("journal");
+            else if (action === "navigate-ai") goTab("ai");
+            else if (action === "export") handleExportData();
+            else if (action === "run-audit") goTab("dashboard");
           }}
         />
 
@@ -324,27 +318,27 @@ const Index = () => {
         </div>
 
         {/* Main Content - Mobile First Tabs */}
-        <Tabs defaultValue="dashboard" className="space-y-4 md:space-y-8">
-          <TabsList ref={tabsRef} className="grid w-full grid-cols-5 bg-card border h-auto p-1 gap-0.5">
-            <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+        <Tabs value={tab} onValueChange={goTab} className="space-y-4 md:space-y-8">
+          <TabsList ref={tabsRef} className="fixed md:static bottom-0 inset-x-0 z-40 grid w-full grid-cols-5 h-auto p-1 gap-0.5 rounded-none md:rounded-lg border-t md:border bg-background/95 md:bg-card backdrop-blur-md shadow-elegant md:shadow-none pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+            <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none md:data-[state=active]:bg-primary md:data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-1 min-h-[56px] rounded-lg touch-manipulation">
               <BarChart3 className="h-4 w-4" />
-              <span className="text-[10px] leading-tight">Board</span>
+              <span className="text-[11px] font-medium leading-tight">Accueil</span>
             </TabsTrigger>
-            <TabsTrigger value="journal" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+            <TabsTrigger value="journal" className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none md:data-[state=active]:bg-primary md:data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-1 min-h-[56px] rounded-lg touch-manipulation">
               <BookOpen className="h-4 w-4" />
-              <span className="text-[10px] leading-tight">Journal</span>
+              <span className="text-[11px] font-medium leading-tight">Journal</span>
             </TabsTrigger>
-            <TabsTrigger value="payments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+            <TabsTrigger value="payments" className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none md:data-[state=active]:bg-primary md:data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-1 min-h-[56px] rounded-lg touch-manipulation">
               <CreditCard className="h-4 w-4" />
-              <span className="text-[10px] leading-tight">Paiement</span>
+              <span className="text-[11px] font-medium leading-tight">Paiement</span>
             </TabsTrigger>
-            <TabsTrigger value="ai" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+            <TabsTrigger value="ai" className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none md:data-[state=active]:bg-primary md:data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-1 min-h-[56px] rounded-lg touch-manipulation">
               <Bot className="h-4 w-4" />
-              <span className="text-[10px] leading-tight">IA</span>
+              <span className="text-[11px] font-medium leading-tight">IA</span>
             </TabsTrigger>
-            <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-0.5 min-h-[52px]">
+            <TabsTrigger value="reports" className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none md:data-[state=active]:bg-primary md:data-[state=active]:text-primary-foreground flex flex-col items-center py-2 px-1 gap-1 min-h-[56px] rounded-lg touch-manipulation">
               <FileBarChart className="h-4 w-4" />
-              <span className="text-[10px] leading-tight">Rapports</span>
+              <span className="text-[11px] font-medium leading-tight">Rapports</span>
             </TabsTrigger>
           </TabsList>
           

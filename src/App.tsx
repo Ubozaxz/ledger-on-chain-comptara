@@ -31,7 +31,7 @@ const App = () => (
         <Sonner />
         
         {/* Footer signature */}
-        <footer className="fixed bottom-0 left-0 right-0 z-50 text-center text-xs text-muted-foreground/70 bg-background/80 backdrop-blur-sm py-3 border-t border-border/20 safe-area-bottom">
+        <footer className="text-center text-xs text-muted-foreground/70 py-4 pb-24 md:pb-4">
           designed by promé
         </footer>
       </TooltipProvider>
