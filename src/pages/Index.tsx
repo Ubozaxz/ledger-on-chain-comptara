@@ -250,6 +250,7 @@ const Index = () => {
           </Button>
         </div>
 
+        <ErrorBoundary compact label="overview">
         <DashboardStats entries={entries} payments={payments} />
         
         {/* Smart Suggestions */}
@@ -316,6 +317,8 @@ const Index = () => {
             </CardContent>
           </Card>
         </div>
+
+        </ErrorBoundary>
 
         {/* Main Content - Mobile First Tabs */}
         <Tabs value={tab} onValueChange={goTab} className="space-y-4 md:space-y-8">
