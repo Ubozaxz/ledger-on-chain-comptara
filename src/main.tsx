@@ -4,6 +4,9 @@ import "./index.css";
 import "./lib/i18n";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { reloadWithFreshFiles } from "./lib/app-recovery";
+import { installDomGuard } from "./lib/dom-guard";
+
+installDomGuard();
 
 // A new version was published while the phone still had old files: reload with fresh ones.
 window.addEventListener("vite:preloadError", (e) => {
