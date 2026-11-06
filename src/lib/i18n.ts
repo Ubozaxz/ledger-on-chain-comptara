@@ -163,4 +163,9 @@ i18n
     }
   });
 
+// Keep the page language in sync so phones don't offer to auto-translate (which breaks the app).
+const syncLang = (lng: string) => { try { document.documentElement.lang = lng?.slice(0, 2) || 'fr'; } catch { /* ignore */ } };
+syncLang(i18n.language);
+i18n.on('languageChanged', syncLang);
+
 export default i18n;
