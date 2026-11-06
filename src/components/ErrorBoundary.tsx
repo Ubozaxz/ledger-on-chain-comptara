@@ -44,9 +44,15 @@ export class ErrorBoundary extends Component<Props, State> {
           <AlertTriangle className="h-10 w-10 text-destructive mx-auto" />
           <h1 className="text-lg font-semibold text-foreground">Oups, un problème est survenu</h1>
           <p className="text-sm text-muted-foreground">Vos données sont en sécurité. Rechargez l'application pour continuer.</p>
-          <Button className="w-full h-12 bg-gradient-primary" onClick={() => reloadWithFreshFiles(true)}>
-            <RefreshCw className="h-4 w-4 mr-2" /> Recharger l'application
+          <Button className="w-full h-12 bg-gradient-primary" onClick={this.reset}>
+            <RefreshCw className="h-4 w-4 mr-2" /> Réessayer
           </Button>
+          <Button variant="outline" className="w-full h-12" onClick={() => reloadWithFreshFiles(true)}>
+            Recharger l'application
+          </Button>
+          {this.state.error?.message && (
+            <p className="text-[11px] text-muted-foreground/70 break-words font-mono">{this.state.error.message.slice(0, 160)}</p>
+          )}
         </div>
       </div>
     );
